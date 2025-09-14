@@ -19,13 +19,12 @@ class FourthActivity : AppCompatActivity() {
         logBtn.setOnClickListener {
             val intent = Intent(this, FifthActivity::class.java)
             startActivity(intent)
-            finish()
         }
         val signBtn: TextView = findViewById(R.id.sign_up_button)
         signBtn.setOnClickListener {
             val intent = Intent(this, SecondActivity::class.java)
             startActivity(intent)
-            finish()
+
         }
     }
 }

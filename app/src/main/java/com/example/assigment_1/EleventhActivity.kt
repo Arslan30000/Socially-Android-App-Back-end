@@ -15,18 +15,44 @@ class EleventhActivity: AppCompatActivity() {
             startActivity(intent)
             finish()
         }
-        val searchBtn: ImageView = findViewById(R.id.search_icon)
-        searchBtn.setOnClickListener {
-            val intent = Intent(this, SeventhActivity::class.java)
-            startActivity(intent)
-            finish()
-        }
+
         val you_button: TextView= findViewById(R.id.tab_you)
         you_button.setOnClickListener {
             val intent = Intent(this, TwelfthActivity::class.java)
             startActivity(intent)
             finish()
         }
+        val post_btn: ImageView = findViewById(R.id.post_icon)
+        post_btn.setOnClickListener {
+            val intent = Intent(this, FifteenthActivity::class.java)
+            startActivity(intent)
+            finish()
+        }
+        val P: ImageView = findViewById(R.id.search_icon)
+        P.setOnClickListener {
+            val intent = Intent(this, SeventhActivity::class.java)
+            startActivity(intent)
+            finish()
+        }
+        val P_: de.hdodenhof.circleimageview.CircleImageView = findViewById(R.id.profile_icon)
+        P_.setOnClickListener {
+            val intent = Intent(this, LastActivity::class.java)
+            startActivity(intent)
+
+        }
+        val P_1: de.hdodenhof.circleimageview.CircleImageView = findViewById(R.id.p_1)
+        P_1.setOnClickListener {
+            val intent = Intent(this, SeventeenActivity::class.java)
+            startActivity(intent)
+
+        }
+        val P_2: de.hdodenhof.circleimageview.CircleImageView = findViewById(R.id.p_2)
+        P_2.setOnClickListener {
+            val intent = Intent(this, SeventeenActivity::class.java)
+            startActivity(intent)
+
+        }
+
     }
 
 }

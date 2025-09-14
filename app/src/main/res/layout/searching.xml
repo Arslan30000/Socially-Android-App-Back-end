@@ -251,15 +251,30 @@
                 android:gravity="center_vertical"
                 android:paddingStart="10dp"
                 android:paddingEnd="10dp">
-
+                <RelativeLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    >
                 <de.hdodenhof.circleimageview.CircleImageView
                     android:layout_width="40dp"
                     android:layout_height="40dp"
-                    android:src="@drawable/hash_icon"
-                    app:civ_border_width="2dp"
+                    android:src="@drawable/circle_bg_white"
+                    app:civ_border_width="0.5dp"
                     app:civ_border_color="@color/black"
                     >
                 </de.hdodenhof.circleimageview.CircleImageView>
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/hash"
+                        android:textStyle="bold"
+                        android:textSize="20sp"
+                        android:textColor="@color/black"
+                        android:layout_centerInParent="true"
+                        >
+                    </TextView>
+
+                </RelativeLayout>
 
                 <LinearLayout
                     android:layout_width="wrap_content"
@@ -295,14 +310,30 @@
             android:paddingStart="10dp"
             android:paddingEnd="10dp">
 
-            <de.hdodenhof.circleimageview.CircleImageView
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:src="@drawable/hash_icon"
-                app:civ_border_width="2dp"
-                app:civ_border_color="@color/black"
+            <RelativeLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
                 >
-            </de.hdodenhof.circleimageview.CircleImageView>
+                <de.hdodenhof.circleimageview.CircleImageView
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:src="@drawable/circle_bg_white"
+                    app:civ_border_width="0.5dp"
+                    app:civ_border_color="@color/black"
+                    >
+                </de.hdodenhof.circleimageview.CircleImageView>
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/hash"
+                    android:textStyle="bold"
+                    android:textSize="20sp"
+                    android:textColor="@color/black"
+                    android:layout_centerInParent="true"
+                    >
+                </TextView>
+
+            </RelativeLayout>
 
             <LinearLayout
                 android:layout_width="wrap_content"
@@ -313,7 +344,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/internshala_2"
+                    android:text="@string/h_1"
                     android:textStyle="bold"
                     android:textSize="14sp"
                     android:textColor="@color/black">
@@ -322,7 +353,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/posts"
+                    android:text="@string/N_1"
                     android:textSize="13sp"
                     android:textColor="@color/light_grey">
                 </TextView>
@@ -336,14 +367,31 @@
             android:paddingStart="10dp"
             android:paddingEnd="10dp">
 
-            <de.hdodenhof.circleimageview.CircleImageView
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:src="@drawable/hash_icon"
-                app:civ_border_width="2dp"
-                app:civ_border_color="@color/black"
+            <RelativeLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
                 >
-            </de.hdodenhof.circleimageview.CircleImageView>
+                <de.hdodenhof.circleimageview.CircleImageView
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:src="@drawable/circle_bg_white"
+                    app:civ_border_width="0.5dp"
+                    app:civ_border_color="@color/black"
+                    >
+                </de.hdodenhof.circleimageview.CircleImageView>
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/hash"
+                    android:textStyle="bold"
+                    android:textSize="20sp"
+                    android:textColor="@color/black"
+
+                    android:layout_centerInParent="true"
+                    >
+                </TextView>
+
+            </RelativeLayout>
 
             <LinearLayout
                 android:layout_width="wrap_content"
@@ -354,7 +402,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/internshala_2"
+                    android:text="@string/h_2"
                     android:textStyle="bold"
                     android:textSize="14sp"
                     android:textColor="@color/black">
@@ -363,7 +411,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/posts"
+                    android:text="@string/N_2"
                     android:textSize="13sp"
                     android:textColor="@color/light_grey">
                 </TextView>
@@ -377,14 +425,30 @@
             android:paddingStart="10dp"
             android:paddingEnd="10dp">
 
-            <de.hdodenhof.circleimageview.CircleImageView
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:src="@drawable/hash_icon"
-                app:civ_border_width="2dp"
-                app:civ_border_color="@color/black"
+            <RelativeLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
                 >
-            </de.hdodenhof.circleimageview.CircleImageView>
+                <de.hdodenhof.circleimageview.CircleImageView
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:src="@drawable/circle_bg_white"
+                    app:civ_border_width="0.5dp"
+                    app:civ_border_color="@color/black"
+                    >
+                </de.hdodenhof.circleimageview.CircleImageView>
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/hash"
+                    android:textStyle="bold"
+                    android:textSize="20sp"
+                    android:textColor="@color/black"
+                    android:layout_centerInParent="true"
+                    >
+                </TextView>
+
+            </RelativeLayout>
 
             <LinearLayout
                 android:layout_width="wrap_content"
@@ -395,7 +459,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/internshala_2"
+                    android:text="@string/h_3"
                     android:textStyle="bold"
                     android:textSize="14sp"
                     android:textColor="@color/black">
@@ -404,12 +468,70 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/posts"
+                    android:text="@string/N_1"
                     android:textSize="13sp"
                     android:textColor="@color/light_grey">
                 </TextView>
             </LinearLayout>
         </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="60dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp">
+
+                <RelativeLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    >
+                    <de.hdodenhof.circleimageview.CircleImageView
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:src="@drawable/circle_bg_white"
+                        app:civ_border_width="0.5dp"
+                        app:civ_border_color="@color/black"
+                        >
+                    </de.hdodenhof.circleimageview.CircleImageView>
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/hash"
+                        android:textStyle="bold"
+                        android:textSize="20sp"
+                        android:textColor="@color/black"
+                        android:layout_centerInParent="true"
+                        >
+                    </TextView>
+
+                </RelativeLayout>
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_marginStart="10dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/h_4"
+                        android:textStyle="bold"
+                        android:textSize="14sp"
+                        android:textColor="@color/black">
+                    </TextView>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/N_1"
+                        android:textSize="13sp"
+                        android:textColor="@color/light_grey">
+                    </TextView>
+                </LinearLayout>
+            </LinearLayout>
+
 
         </LinearLayout>
     </ScrollView>

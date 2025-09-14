@@ -14,19 +14,18 @@ class ThirdActivity : AppCompatActivity() {
         backBtn.setOnClickListener {
             val intent = Intent(this, SecondActivity::class.java)
             startActivity(intent)
-            finish()
         }
         val nextbtn: ImageButton = findViewById(R.id.login_button)
         nextbtn.setOnClickListener {
             val intent = Intent(this, FifthActivity::class.java)
             startActivity(intent)
-            finish()
+
         }
         val btn3: TextView=findViewById(R.id.Switch_btn)
         btn3.setOnClickListener {
             val intent = Intent(this, FourthActivity::class.java)
             startActivity(intent)
-            finish()
+
         }
 
     }

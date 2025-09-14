@@ -19,6 +19,16 @@ class NinthActivity : AppCompatActivity() {
             startActivity(intent)
             finish()
         }
+        val camera_btn: ImageView = findViewById(R.id.camera_icon)
+        camera_btn.setOnClickListener {
+            val intent = Intent(this, SixteenActivity::class.java)
+            startActivity(intent)
+        }
+        val Profile_btn: ImageView = findViewById(R.id.profile_pic)
+        Profile_btn.setOnClickListener {
+            val intent = Intent(this, TwentyActivity::class.java)
+            startActivity(intent)
+        }
     }
 
 

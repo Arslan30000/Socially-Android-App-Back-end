@@ -15,24 +15,52 @@ class TwelfthActivity: AppCompatActivity() {
             startActivity(intent)
             finish()
         }
-        val homebtn: ImageView = findViewById(R.id.home_icon)
-        homebtn.setOnClickListener {
-            val intent = Intent(this, FifthActivity::class.java)
-            startActivity(intent)
-            finish()
-        }
+
         val searchBtn: ImageView = findViewById(R.id.search_icon)
         searchBtn.setOnClickListener {
             val intent = Intent(this, SeventhActivity::class.java)
             startActivity(intent)
             finish()
         }
-        val HighPage: ImageView=findViewById(R.id.post_icon)
-        HighPage.setOnClickListener {
-            val intent = Intent(this, ThirteenActivity::class.java)
+        val homebtn: ImageView = findViewById(R.id.home_icon)
+        homebtn.setOnClickListener {
+            val intent = Intent(this, FifthActivity::class.java)
             startActivity(intent)
             finish()
         }
+        val m_1_: RelativeLayout = findViewById(R.id.m_1)
+        m_1_.setOnClickListener {
+            val intent = Intent(this, NinthActivity::class.java)
+            startActivity(intent)
+
+        }
+        val m_2_: RelativeLayout = findViewById(R.id.m_2)
+        m_2_.setOnClickListener {
+            val intent = Intent(this, NinthActivity::class.java)
+            startActivity(intent)
+
+        }
+        val f: RelativeLayout= findViewById(R.id.follow_b)
+        f.setOnClickListener {
+            val intent = Intent(this, TwentyOneActivity::class.java)
+            startActivity(intent)
+
+        }
+        val post_btn: ImageView = findViewById(R.id.post_icon)
+        post_btn.setOnClickListener {
+            val intent = Intent(this, FifteenthActivity::class.java)
+            startActivity(intent)
+            finish()
+        }
+        val P: de.hdodenhof.circleimageview.CircleImageView= findViewById(R.id.profile_icon)
+        P.setOnClickListener {
+            val intent = Intent(this, LastActivity::class.java)
+            startActivity(intent)
+
+        }
+
+
+
 
     }
 

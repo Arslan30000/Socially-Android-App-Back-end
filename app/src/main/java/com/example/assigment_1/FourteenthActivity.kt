@@ -17,7 +17,7 @@ class FourteenthActivity : AppCompatActivity() {
         }
         val done_btn: TextView= findViewById(R.id.done_btn)
         done_btn.setOnClickListener {
-            val intent = Intent(this, ThirteenActivity::class.java)
+            val intent = Intent(this, LastActivity::class.java)
             startActivity(intent)
             finish()
         }

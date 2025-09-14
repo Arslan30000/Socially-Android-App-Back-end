@@ -24,11 +24,12 @@
             android:textColor="@color/brown"
             android:textSize="50sp"
             android:gravity="center"
-            android:layout_marginTop="20dp">
+            android:textStyle="bold"
+            android:layout_marginTop="100dp">
         </TextView>
         <ImageView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_width="70dp"
+            android:layout_height="70dp"
             android:background="@drawable/profile_image"
             android:layout_gravity="center"
             android:layout_marginTop="20dp">
