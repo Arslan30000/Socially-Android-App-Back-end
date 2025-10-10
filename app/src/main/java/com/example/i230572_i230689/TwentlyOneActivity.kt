@@ -1,9 +1,5 @@
-package com.example.assigment_1
-import android.content.Intent
+package com.example.i230572_i230689
 import android.os.Bundle
-import android.widget.ImageView
-import android.widget.LinearLayout
-import android.widget.RelativeLayout
 import androidx.appcompat.app.AppCompatActivity
 class TwentyOneActivity: AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {

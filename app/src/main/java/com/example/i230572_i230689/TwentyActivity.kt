@@ -1,22 +1,20 @@
-package com.example.assigment_1
+package com.example.i230572_i230689
 import android.content.Intent
 import android.os.Bundle
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.RelativeLayout
-import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
-class LastActivity : AppCompatActivity() {
+class TwentyActivity: AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.profile_page)
+        setContentView(R.layout.profile_f)
         val Searchbtn: ImageView = findViewById(R.id.search_icon)
         Searchbtn.setOnClickListener {
             val intent = Intent(this, SixthActivity::class.java)
             startActivity(intent)
 
         }
-
         val like_btn: ImageView = findViewById(R.id.like_icon)
         like_btn.setOnClickListener {
             val intent = Intent(this, EleventhActivity::class.java)
@@ -29,22 +27,9 @@ class LastActivity : AppCompatActivity() {
             startActivity(intent)
 
         }
-        val h: ImageView = findViewById(R.id.home_icon)
-        h.setOnClickListener {
-            val intent = Intent(this, FifthActivity::class.java)
-            startActivity(intent)
-            finish()
-
-        }
-        val c: LinearLayout = findViewById(R.id.s_5)
-        c.setOnClickListener {
-            val intent = Intent(this, SixteenActivity::class.java)
-            startActivity(intent)
-
-        }
-        val e: RelativeLayout = findViewById(R.id.Following_)
-        e.setOnClickListener {
-            val intent = Intent(this, FourteenthActivity::class.java)
+        val m: RelativeLayout = findViewById(R.id.message)
+        m.setOnClickListener {
+            val intent = Intent(this, NinthActivity::class.java)
             startActivity(intent)
 
         }
@@ -66,6 +51,19 @@ class LastActivity : AppCompatActivity() {
             startActivity(intent)
 
         }
-    }
+        val h_4: LinearLayout= findViewById(R.id.s_4)
+        h_4.setOnClickListener {
+            val intent = Intent(this, ThirteenActivity::class.java)
+            startActivity(intent)
 
+        }
+        val h: ImageView = findViewById(R.id.home_icon)
+        h.setOnClickListener {
+            val intent = Intent(this, FifthActivity::class.java)
+            startActivity(intent)
+            finish()
+
+        }
+    }
 }
+

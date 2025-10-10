@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.assigment_1"
+    namespace = "com.example.i230572_i230689"
     compileSdk = 36
 
     defaultConfig {

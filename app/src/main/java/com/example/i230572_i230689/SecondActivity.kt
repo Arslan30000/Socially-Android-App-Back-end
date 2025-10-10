@@ -1,6 +1,5 @@
-package com.example.assigment_1
+package com.example.i230572_i230689
 import android.content.Intent
-import android.media.Image
 import android.os.Bundle
 import android.widget.ImageButton
 import android.widget.ImageView

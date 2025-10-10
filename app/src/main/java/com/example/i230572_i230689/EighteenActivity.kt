@@ -1,9 +1,7 @@
-package com.example.assigment_1
+package com.example.i230572_i230689
 import android.content.Intent
 import android.os.Bundle
 import android.widget.ImageView
-import android.widget.RelativeLayout
-import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 
 class EighteenActivity : AppCompatActivity() {
