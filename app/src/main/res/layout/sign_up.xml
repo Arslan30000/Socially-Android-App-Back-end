@@ -72,6 +72,7 @@
             android:layout_gravity="center"
             >
             <de.hdodenhof.circleimageview.CircleImageView
+                android:id="@+id/profile_image"
                 android:layout_width="80dp"
                 android:layout_height="80dp"
                 android:src="@drawable/circle_bg_white"
@@ -100,6 +101,7 @@
             >
         </TextView>
         <EditText
+            android:id="@+id/username_input"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginStart="30dp"
@@ -122,6 +124,7 @@
             >
         </TextView>
         <EditText
+            android:id="@+id/name_input"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginStart="30dp"
@@ -144,6 +147,7 @@
             >
         </TextView>
         <EditText
+            android:id="@+id/lastname_input"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginStart="30dp"
@@ -166,6 +170,7 @@
             >
         </TextView>
         <EditText
+            android:id="@+id/date_input"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginStart="30dp"
@@ -189,6 +194,7 @@
             >
         </TextView>
         <EditText
+            android:id="@+id/email_input"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginStart="30dp"
@@ -219,10 +225,12 @@
             android:layout_marginTop="5dp">
 
             <EditText
+                android:id="@+id/password_input"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:textColor="@color/white"
                 android:textSize="12sp"
+                android:inputType="textPassword"
                 android:backgroundTint="@color/white2"
                 android:paddingEnd="40dp">
             </EditText>
@@ -234,7 +242,8 @@
                 android:background="@drawable/visibility"
                 android:layout_alignParentEnd="true"
                 android:layout_centerVertical="true"
-                android:layout_marginEnd="8dp">
+                android:layout_marginEnd="8dp"
+                >
             </ImageView>
         </RelativeLayout>
         <RelativeLayout

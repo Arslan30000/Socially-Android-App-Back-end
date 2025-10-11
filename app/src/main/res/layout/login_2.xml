@@ -51,6 +51,7 @@
         android:layout_below="@id/username_input"
         android:layout_marginHorizontal="24dp"
         android:layout_marginTop="12dp"
+        android:inputType="textPassword"
         android:hint="@string/Password"
         android:padding="12dp"
         android:textColor="@color/black"
