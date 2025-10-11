@@ -2,26 +2,28 @@ package com.example.i230572_i230689
 
 import android.app.Activity
 import android.content.Intent
+import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
+import android.provider.MediaStore
 import android.text.InputType
+import android.util.Base64
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
-import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
+import java.io.ByteArrayOutputStream
 
 class SecondActivity : AppCompatActivity() {
 
-    private lateinit var auth: FirebaseAuth
     private lateinit var dbRef: DatabaseReference
     private var imageUri: Uri? = null
     private var isPasswordVisible = false
+    private var imageBase64: String = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.sign_up)
 
-        auth = FirebaseAuth.getInstance()
         dbRef = FirebaseDatabase.getInstance().getReference("users")
 
         val backBtn: ImageButton = findViewById(R.id.back_arrow)
@@ -46,20 +48,12 @@ class SecondActivity : AppCompatActivity() {
             startActivityForResult(intent, 101)
         }
 
-
         passwordToggle.setOnClickListener {
             isPasswordVisible = !isPasswordVisible
-            if (isPasswordVisible) {
-                passwordInput.inputType = InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
-                passwordToggle.setImageResource(R.drawable.visibility)
-            } else {
-                passwordInput.inputType =
-                    InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-                passwordToggle.setImageResource(R.drawable.visibility)
-            }
-            passwordInput.setSelection(passwordInput.text.length)
+            passwordInput.inputType = if (isPasswordVisible)
+                InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+            else InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
         }
-
 
         signInIcon.setOnClickListener {
             val username = usernameInput.text.toString().trim()
@@ -78,32 +72,44 @@ class SecondActivity : AppCompatActivity() {
                 .addListenerForSingleValueEvent(object : ValueEventListener {
                     override fun onDataChange(snapshot: DataSnapshot) {
                         if (snapshot.exists()) {
-                            Toast.makeText(
-                                this@SecondActivity,
-                                "Username already taken!",
-                                Toast.LENGTH_SHORT
-                            ).show()
+                            Toast.makeText(this@SecondActivity, "Username already taken!", Toast.LENGTH_SHORT).show()
                         } else {
-                            val uid = auth.currentUser?.uid ?: dbRef.push().key!!
+                            val uid = dbRef.push().key!!
                             val userMap = mapOf(
+                                "uid" to uid,
                                 "username" to username,
                                 "name" to name,
                                 "lastname" to lastname,
                                 "date" to date,
                                 "email" to email,
                                 "password" to password,
-                                "imageUrl" to (imageUri?.toString() ?: "")
+                                "imageBase64" to imageBase64
                             )
                             dbRef.child(uid).setValue(userMap)
-                            Toast.makeText(this@SecondActivity, "Account Created!", Toast.LENGTH_SHORT).show()
-                            startActivity(Intent(this@SecondActivity, FourthActivity::class.java))
-                            finish()
+                                .addOnSuccessListener {
+                                    // Save all data in prefs
+                                    val prefs = getSharedPreferences("user_session", MODE_PRIVATE)
+                                    prefs.edit().apply {
+                                        putString("username", username)
+                                        putString("name", name)
+                                        putString("lastname", lastname)
+                                        putString("email", email)
+                                        putString("date", date)
+                                        putString("imageBase64", imageBase64)
+                                        apply()
+                                    }
+
+                                    Toast.makeText(this@SecondActivity, "Account Created!", Toast.LENGTH_SHORT).show()
+                                    startActivity(Intent(this@SecondActivity, ThirdActivity::class.java))
+                                    finish()
+                                }
+                                .addOnFailureListener {
+                                    Toast.makeText(this@SecondActivity, "Error: ${it.message}", Toast.LENGTH_SHORT).show()
+                                }
                         }
                     }
 
-                    override fun onCancelled(error: DatabaseError) {
-                        Toast.makeText(this@SecondActivity, "Error: ${error.message}", Toast.LENGTH_SHORT).show()
-                    }
+                    override fun onCancelled(error: DatabaseError) {}
                 })
         }
     }
@@ -114,6 +120,16 @@ class SecondActivity : AppCompatActivity() {
             imageUri = data?.data
             val profileImg: ImageView = findViewById(R.id.profile_image)
             profileImg.setImageURI(imageUri)
+
+            val bitmap = MediaStore.Images.Media.getBitmap(contentResolver, imageUri)
+            imageBase64 = encodeToBase64(bitmap)
         }
+    }
+
+    private fun encodeToBase64(bitmap: Bitmap): String {
+        val byteArrayOutputStream = ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 70, byteArrayOutputStream)
+        val byteArray = byteArrayOutputStream.toByteArray()
+        return Base64.encodeToString(byteArray, Base64.DEFAULT)
     }
 }

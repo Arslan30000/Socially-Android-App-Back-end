@@ -27,17 +27,19 @@
             android:textStyle="bold"
             android:layout_marginTop="100dp">
         </TextView>
-        <ImageView
+        <de.hdodenhof.circleimageview.CircleImageView
+            android:id="@+id/profile_image_1"
             android:layout_width="70dp"
             android:layout_height="70dp"
-            android:background="@drawable/profile_image"
+            android:src="@drawable/profile_image"
             android:layout_gravity="center"
             android:layout_marginTop="20dp">
-        </ImageView>
+        </de.hdodenhof.circleimageview.CircleImageView>
         <TextView
+            android:id="@+id/name_text"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/Jacob_w"
+            android:text="Loading..."
             android:textStyle="bold"
             android:textColor="@color/black"
             android:layout_gravity="center"
