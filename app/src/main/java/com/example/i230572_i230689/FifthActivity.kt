@@ -5,13 +5,39 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import androidx.appcompat.app.AppCompatActivity
 import com.example.i230572_i230689.*
-
+import com.google.firebase.database.*
+import com.google.firebase.auth.FirebaseAuth
+import android.util.*
 
 class FifthActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.main_page)
+        val db = FirebaseDatabase.getInstance().getReference("users")
+        val uid = FirebaseAuth.getInstance().currentUser?.uid
+        if (uid != null) {
+            db.child(uid).addListenerForSingleValueEvent(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    val followers = snapshot.child("followers").value
+                    val following = snapshot.child("following").value
+                    val followRequests = snapshot.child("followRequests").value
+                    val posts = snapshot.child("posts").value
+                    val stories = snapshot.child("stories").value
 
+                    Log.d("FirebaseData", "Followers: $followers")
+                    Log.d("FirebaseData", "Following: $following")
+                    Log.d("FirebaseData", "FollowRequests: $followRequests")
+                    Log.d("FirebaseData", "Posts: $posts")
+                    Log.d("FirebaseData", "Stories: $stories")
+                }
+
+                override fun onCancelled(error: DatabaseError) {
+                    Log.e("FirebaseError", error.message)
+                }
+            })
+        } else {
+            Log.e("FirebaseError", "User not logged in")
+        }
         val Searchbtn: ImageView = findViewById(R.id.search_icon)
         Searchbtn.setOnClickListener {
             val intent = Intent(this, SixthActivity::class.java)

@@ -1,5 +1,4 @@
 package com.example.i230572_i230689
-
 import android.app.Activity
 import android.content.Intent
 import android.graphics.Bitmap
@@ -12,20 +11,15 @@ import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import com.google.firebase.database.*
 import java.io.ByteArrayOutputStream
-
 class SecondActivity : AppCompatActivity() {
-
     private lateinit var dbRef: DatabaseReference
     private var imageUri: Uri? = null
     private var isPasswordVisible = false
     private var imageBase64: String = ""
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.sign_up)
-
         dbRef = FirebaseDatabase.getInstance().getReference("users")
-
         val backBtn: ImageButton = findViewById(R.id.back_arrow)
         val profileImg: ImageView = findViewById(R.id.profile_image)
         val usernameInput: EditText = findViewById(R.id.username_input)
@@ -36,25 +30,21 @@ class SecondActivity : AppCompatActivity() {
         val passwordInput: EditText = findViewById(R.id.password_input)
         val passwordToggle: ImageView = findViewById(R.id.password_toggle)
         val signInIcon: ImageButton = findViewById(R.id.sign_in_icon)
-
         backBtn.setOnClickListener {
             startActivity(Intent(this, FourthActivity::class.java))
             finish()
         }
-
         profileImg.setOnClickListener {
             val intent = Intent(Intent.ACTION_GET_CONTENT)
             intent.type = "image/*"
             startActivityForResult(intent, 101)
         }
-
         passwordToggle.setOnClickListener {
             isPasswordVisible = !isPasswordVisible
             passwordInput.inputType = if (isPasswordVisible)
                 InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
             else InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
         }
-
         signInIcon.setOnClickListener {
             val username = usernameInput.text.toString().trim()
             val name = nameInput.text.toString().trim()
@@ -67,7 +57,6 @@ class SecondActivity : AppCompatActivity() {
                 Toast.makeText(this, "Please fill all required fields", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-
             dbRef.orderByChild("username").equalTo(username)
                 .addListenerForSingleValueEvent(object : ValueEventListener {
                     override fun onDataChange(snapshot: DataSnapshot) {
@@ -75,30 +64,44 @@ class SecondActivity : AppCompatActivity() {
                             Toast.makeText(this@SecondActivity, "Username already taken!", Toast.LENGTH_SHORT).show()
                         } else {
                             val uid = dbRef.push().key!!
-                            val userMap = mapOf(
-                                "uid" to uid,
-                                "username" to username,
-                                "name" to name,
-                                "lastname" to lastname,
-                                "date" to date,
-                                "email" to email,
-                                "password" to password,
-                                "imageBase64" to imageBase64
+                            val newUser = User(
+                                uid = uid,
+                                username = username,
+                                name = name,
+                                lastname = lastname,
+                                email = email,
+                                password = password,
+                                date = date,
+                                imageBase64 = imageBase64,
+                                followers = mutableMapOf(),
+                                following = mutableMapOf(),
+                                followRequests = mutableMapOf(),
+                                posts = mutableMapOf(),
+                                stories = mutableMapOf()
                             )
-                            dbRef.child(uid).setValue(userMap)
+                            val userRef = dbRef.child(uid)
+                            userRef.setValue(newUser)
                                 .addOnSuccessListener {
-                                    // Save all data in prefs
-                                    val prefs = getSharedPreferences("user_session", MODE_PRIVATE)
-                                    prefs.edit().apply {
-                                        putString("username", username)
-                                        putString("name", name)
-                                        putString("lastname", lastname)
-                                        putString("email", email)
-                                        putString("date", date)
-                                        putString("imageBase64", imageBase64)
-                                        apply()
+                                    userRef.get().addOnSuccessListener { snapshot ->
+                                        val updates = mutableMapOf<String, Any>()
+                                        if (!snapshot.hasChild("followers")) updates["followers"] = mapOf<String, Boolean>()
+                                        if (!snapshot.hasChild("following")) updates["following"] = mapOf<String, Boolean>()
+                                        if (!snapshot.hasChild("followRequests")) updates["followRequests"] = mapOf<String, Boolean>()
+                                        if (!snapshot.hasChild("posts")) updates["posts"] = mapOf<String, Boolean>()
+                                        if (!snapshot.hasChild("stories")) updates["stories"] = mapOf<String, Boolean>()
+
+                                        if (updates.isNotEmpty()) {
+                                            userRef.updateChildren(updates)
+                                                .addOnSuccessListener {
+                                                    Toast.makeText(this@SecondActivity, "New fields added successfully!", Toast.LENGTH_SHORT).show()
+                                                }
+                                                .addOnFailureListener { e ->
+                                                    Toast.makeText(this@SecondActivity, "Failed to add fields: ${e.message}", Toast.LENGTH_SHORT).show()
+                                                }
+                                        }
                                     }
 
+                                    saveUserToPrefs(newUser)
                                     Toast.makeText(this@SecondActivity, "Account Created!", Toast.LENGTH_SHORT).show()
                                     startActivity(Intent(this@SecondActivity, ThirdActivity::class.java))
                                     finish()
@@ -131,5 +134,23 @@ class SecondActivity : AppCompatActivity() {
         bitmap.compress(Bitmap.CompressFormat.JPEG, 70, byteArrayOutputStream)
         val byteArray = byteArrayOutputStream.toByteArray()
         return Base64.encodeToString(byteArray, Base64.DEFAULT)
+    }
+    private fun saveUserToPrefs(user: User) {
+        val prefs = getSharedPreferences("user_session", MODE_PRIVATE)
+        prefs.edit().apply {
+            putString("uid", user.uid)
+            putString("username", user.username)
+            putString("name", user.name)
+            putString("lastname", user.lastname)
+            putString("email", user.email)
+            putString("date", user.date)
+            putString("imageBase64", user.imageBase64)
+            putString("followers", user.followers.keys.joinToString(","))
+            putString("following", user.following.keys.joinToString(","))
+            putString("followRequests", user.followRequests.keys.joinToString(","))
+            putString("posts", user.posts.keys.joinToString(","))
+            putString("stories", user.stories.keys.joinToString(","))
+            apply()
+        }
     }
 }
