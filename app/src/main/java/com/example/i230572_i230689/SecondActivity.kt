@@ -1,156 +1,181 @@
 package com.example.i230572_i230689
-import android.app.Activity
+
+import android.app.DatePickerDialog
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
-import android.provider.MediaStore
-import android.text.InputType
 import android.util.Base64
+import android.util.Log
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
 import java.io.ByteArrayOutputStream
+import java.io.InputStream
+import java.util.Calendar
+
 class SecondActivity : AppCompatActivity() {
-    private lateinit var dbRef: DatabaseReference
-    private var imageUri: Uri? = null
+
+    private lateinit var auth: FirebaseAuth
+    private val dbRef = FirebaseDatabase.getInstance().getReference("users")
+
+    private lateinit var usernameInput: EditText
+    private lateinit var nameInput: EditText
+    private lateinit var lastnameInput: EditText
+    private lateinit var dateInput: EditText
+    private lateinit var emailInput: EditText
+    private lateinit var passwordInput: EditText
+    private lateinit var profileImg: ImageView
+    private lateinit var passwordToggle: ImageView
+    private lateinit var signupBtn: ImageButton
+
+    private var encodedImage: String = ""
     private var isPasswordVisible = false
-    private var imageBase64: String = ""
+    private val PICK_IMAGE_REQUEST = 1001
+    private var selectedImageUri: Uri? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.sign_up)
-        dbRef = FirebaseDatabase.getInstance().getReference("users")
-        val backBtn: ImageButton = findViewById(R.id.back_arrow)
-        val profileImg: ImageView = findViewById(R.id.profile_image)
-        val usernameInput: EditText = findViewById(R.id.username_input)
-        val nameInput: EditText = findViewById(R.id.name_input)
-        val lastnameInput: EditText = findViewById(R.id.lastname_input)
-        val dateInput: EditText = findViewById(R.id.date_input)
-        val emailInput: EditText = findViewById(R.id.email_input)
-        val passwordInput: EditText = findViewById(R.id.password_input)
-        val passwordToggle: ImageView = findViewById(R.id.password_toggle)
-        val signInIcon: ImageButton = findViewById(R.id.sign_in_icon)
-        backBtn.setOnClickListener {
-            startActivity(Intent(this, FourthActivity::class.java))
-            finish()
+
+        auth = FirebaseAuth.getInstance()
+
+        usernameInput = findViewById(R.id.username_input)
+        nameInput = findViewById(R.id.name_input)
+        lastnameInput = findViewById(R.id.lastname_input)
+        dateInput = findViewById(R.id.date_input)
+        emailInput = findViewById(R.id.email_input)
+        passwordInput = findViewById(R.id.password_input)
+        profileImg = findViewById(R.id.profile_image)
+        passwordToggle = findViewById(R.id.password_toggle)
+        signupBtn = findViewById(R.id.sign_in_icon)
+
+        dateInput.setOnClickListener {
+            val calendar = Calendar.getInstance()
+            val picker = DatePickerDialog(
+                this,
+                { _, y, m, d -> dateInput.setText("$d/${m + 1}/$y") },
+                calendar.get(Calendar.YEAR),
+                calendar.get(Calendar.MONTH),
+                calendar.get(Calendar.DAY_OF_MONTH)
+            )
+            picker.show()
         }
-        profileImg.setOnClickListener {
-            val intent = Intent(Intent.ACTION_GET_CONTENT)
-            intent.type = "image/*"
-            startActivityForResult(intent, 101)
-        }
+
         passwordToggle.setOnClickListener {
             isPasswordVisible = !isPasswordVisible
-            passwordInput.inputType = if (isPasswordVisible)
-                InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
-            else InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            passwordInput.inputType =
+                if (isPasswordVisible)
+                    android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+                else
+                    android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            passwordToggle.setBackgroundResource(R.drawable.visibility)
+            passwordInput.setSelection(passwordInput.text.length)
         }
-        signInIcon.setOnClickListener {
+
+        profileImg.setOnClickListener {
+            val intent = Intent(Intent.ACTION_PICK)
+            intent.type = "image/*"
+            startActivityForResult(intent, PICK_IMAGE_REQUEST)
+        }
+
+        signupBtn.setOnClickListener {
             val username = usernameInput.text.toString().trim()
             val name = nameInput.text.toString().trim()
             val lastname = lastnameInput.text.toString().trim()
-            val date = dateInput.text.toString().trim()
+            val dob = dateInput.text.toString().trim()
             val email = emailInput.text.toString().trim()
             val password = passwordInput.text.toString().trim()
 
-            if (username.isEmpty() || email.isEmpty() || password.isEmpty()) {
-                Toast.makeText(this, "Please fill all required fields", Toast.LENGTH_SHORT).show()
+            if (username.isEmpty() || name.isEmpty() || lastname.isEmpty() ||
+                dob.isEmpty() || email.isEmpty() || password.isEmpty()
+            ) {
+                Toast.makeText(this, "Please fill all fields", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-            dbRef.orderByChild("username").equalTo(username)
-                .addListenerForSingleValueEvent(object : ValueEventListener {
-                    override fun onDataChange(snapshot: DataSnapshot) {
-                        if (snapshot.exists()) {
-                            Toast.makeText(this@SecondActivity, "Username already taken!", Toast.LENGTH_SHORT).show()
-                        } else {
-                            val uid = dbRef.push().key!!
-                            val newUser = User(
-                                uid = uid,
-                                username = username,
-                                name = name,
-                                lastname = lastname,
-                                email = email,
-                                password = password,
-                                date = date,
-                                imageBase64 = imageBase64,
-                                followers = mutableMapOf(),
-                                following = mutableMapOf(),
-                                followRequests = mutableMapOf(),
-                                posts = mutableMapOf(),
-                                stories = mutableMapOf()
-                            )
-                            val userRef = dbRef.child(uid)
-                            userRef.setValue(newUser)
-                                .addOnSuccessListener {
-                                    userRef.get().addOnSuccessListener { snapshot ->
-                                        val updates = mutableMapOf<String, Any>()
-                                        if (!snapshot.hasChild("followers")) updates["followers"] = mapOf<String, Boolean>()
-                                        if (!snapshot.hasChild("following")) updates["following"] = mapOf<String, Boolean>()
-                                        if (!snapshot.hasChild("followRequests")) updates["followRequests"] = mapOf<String, Boolean>()
-                                        if (!snapshot.hasChild("posts")) updates["posts"] = mapOf<String, Boolean>()
-                                        if (!snapshot.hasChild("stories")) updates["stories"] = mapOf<String, Boolean>()
 
-                                        if (updates.isNotEmpty()) {
-                                            userRef.updateChildren(updates)
-                                                .addOnSuccessListener {
-                                                    Toast.makeText(this@SecondActivity, "New fields added successfully!", Toast.LENGTH_SHORT).show()
-                                                }
-                                                .addOnFailureListener { e ->
-                                                    Toast.makeText(this@SecondActivity, "Failed to add fields: ${e.message}", Toast.LENGTH_SHORT).show()
-                                                }
-                                        }
-                                    }
+            if (encodedImage.isEmpty()) {
+                val defaultBitmap = BitmapFactory.decodeResource(resources, R.drawable.profile_image)
+                encodedImage = encodeImage(defaultBitmap)
+            }
 
-                                    saveUserToPrefs(newUser)
-                                    Toast.makeText(this@SecondActivity, "Account Created!", Toast.LENGTH_SHORT).show()
-                                    startActivity(Intent(this@SecondActivity, ThirdActivity::class.java))
-                                    finish()
-                                }
-                                .addOnFailureListener {
-                                    Toast.makeText(this@SecondActivity, "Error: ${it.message}", Toast.LENGTH_SHORT).show()
-                                }
-                        }
-                    }
-
-                    override fun onCancelled(error: DatabaseError) {}
-                })
+            checkUsernameExists(username) { exists ->
+                if (exists) {
+                    Toast.makeText(this, "Username already taken", Toast.LENGTH_SHORT).show()
+                } else {
+                    registerUser(username, name, lastname, dob, email, password)
+                }
+            }
         }
+    }
+
+    private fun checkUsernameExists(username: String, callback: (Boolean) -> Unit) {
+        dbRef.orderByChild("username").equalTo(username)
+            .addListenerForSingleValueEvent(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    callback(snapshot.exists())
+                }
+                override fun onCancelled(error: DatabaseError) {
+                    callback(false)
+                }
+            })
+    }
+
+    private fun registerUser(username: String, name: String, lastname: String, dob: String, email: String, password: String) {
+        auth.createUserWithEmailAndPassword(email, password)
+            .addOnSuccessListener { result ->
+                val uid = result.user?.uid ?: return@addOnSuccessListener
+
+                val newUser = mapOf(
+                    "uid" to uid,
+                    "username" to username,
+                    "name" to name,
+                    "lastname" to lastname,
+                    "dob" to dob,
+                    "email" to email,
+                    "followers" to mutableMapOf<String, Boolean>(),
+                    "following" to mutableMapOf<String, Boolean>(),
+                    "imageBase64" to encodedImage
+                )
+
+                dbRef.child(uid).setValue(newUser)
+                    .addOnSuccessListener {
+                        Toast.makeText(this, "Account created successfully", Toast.LENGTH_SHORT).show()
+                        startActivity(Intent(this, ThirdActivity::class.java))
+                        finish()
+                    }
+                    .addOnFailureListener {
+                        Toast.makeText(this, "Failed to save user data: ${it.message}", Toast.LENGTH_SHORT).show()
+                    }
+            }
+            .addOnFailureListener {
+                Toast.makeText(this, "Sign up failed: ${it.message}", Toast.LENGTH_SHORT).show()
+                Log.e("FirebaseSignUp", "Error: ${it.message}")
+            }
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == 101 && resultCode == Activity.RESULT_OK) {
-            imageUri = data?.data
-            val profileImg: ImageView = findViewById(R.id.profile_image)
-            profileImg.setImageURI(imageUri)
-
-            val bitmap = MediaStore.Images.Media.getBitmap(contentResolver, imageUri)
-            imageBase64 = encodeToBase64(bitmap)
+        if (requestCode == PICK_IMAGE_REQUEST && resultCode == RESULT_OK && data != null) {
+            selectedImageUri = data.data
+            try {
+                val inputStream: InputStream? = contentResolver.openInputStream(selectedImageUri!!)
+                val bitmap = BitmapFactory.decodeStream(inputStream)
+                profileImg.setImageBitmap(bitmap)
+                encodedImage = encodeImage(bitmap)
+            } catch (e: Exception) {
+                Toast.makeText(this, "Failed to load image", Toast.LENGTH_SHORT).show()
+                Log.e("ImagePicker", "Error: ${e.message}")
+            }
         }
     }
 
-    private fun encodeToBase64(bitmap: Bitmap): String {
-        val byteArrayOutputStream = ByteArrayOutputStream()
-        bitmap.compress(Bitmap.CompressFormat.JPEG, 70, byteArrayOutputStream)
-        val byteArray = byteArrayOutputStream.toByteArray()
-        return Base64.encodeToString(byteArray, Base64.DEFAULT)
-    }
-    private fun saveUserToPrefs(user: User) {
-        val prefs = getSharedPreferences("user_session", MODE_PRIVATE)
-        prefs.edit().apply {
-            putString("uid", user.uid)
-            putString("username", user.username)
-            putString("name", user.name)
-            putString("lastname", user.lastname)
-            putString("email", user.email)
-            putString("date", user.date)
-            putString("imageBase64", user.imageBase64)
-            putString("followers", user.followers.keys.joinToString(","))
-            putString("following", user.following.keys.joinToString(","))
-            putString("followRequests", user.followRequests.keys.joinToString(","))
-            putString("posts", user.posts.keys.joinToString(","))
-            putString("stories", user.stories.keys.joinToString(","))
-            apply()
-        }
+    private fun encodeImage(bitmap: Bitmap): String {
+        val baos = ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 70, baos)
+        val bytes = baos.toByteArray()
+        return Base64.encodeToString(bytes, Base64.DEFAULT)
     }
 }

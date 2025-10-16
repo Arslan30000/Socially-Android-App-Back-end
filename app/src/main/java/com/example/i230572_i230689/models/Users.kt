@@ -24,6 +24,7 @@ data class User(
     var followers: Map<String, Boolean> = emptyMap(),
     var following: Map<String, Boolean> = emptyMap(),
     var followRequests: Map<String, Boolean> = emptyMap(),
+    var bio: String = "",
     var posts: Map<String, Post> = emptyMap(),
     var stories: Map<String, Story> = emptyMap()
 )
