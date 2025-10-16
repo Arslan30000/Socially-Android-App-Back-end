@@ -137,7 +137,11 @@ class SecondActivity : AppCompatActivity() {
                     "email" to email,
                     "followers" to mutableMapOf<String, Boolean>(),
                     "following" to mutableMapOf<String, Boolean>(),
-                    "imageBase64" to encodedImage
+                    "imageBase64" to encodedImage,
+                    "bio" to "",
+                    "posts" to mutableMapOf<String, Post >(),
+                    "stories" to mutableMapOf<String, Story>(),
+                    "followRequests" to mutableMapOf<String, Boolean>()
                 )
 
                 dbRef.child(uid).setValue(newUser)

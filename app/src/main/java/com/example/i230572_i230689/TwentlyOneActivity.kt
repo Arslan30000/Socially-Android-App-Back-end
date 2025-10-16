@@ -4,7 +4,7 @@ import androidx.appcompat.app.AppCompatActivity
 class TwentyOneActivity: AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.profile_f_)
+        setContentView(R.layout.profile_f)
     }
 }
 
