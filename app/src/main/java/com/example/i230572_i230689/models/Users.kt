@@ -1,5 +1,5 @@
 package com.example.i230572_i230689
-
+import com.google.firebase.database.Exclude
 data class Post(
     var postId: String = "",
     var imageBase64: String = "",
@@ -9,10 +9,20 @@ data class Post(
 
 data class Story(
     var storyId: String = "",
-    var imageBase64: String = "",
-    var timestamp: Long = 0,
-    var expiresAt: Long = 0
-)
+    var userId: String = "",
+    var username: String = "",
+    var userProfilePicture: String? = null, // Bitmap string for the user's pfp
+    var storyImage: String = "",            // Bitmap string for the story image itself
+    var timestamp: Long = 0L,               // Time of upload, crucial for 24-hour logic
+
+    // This local-only flag tells the adapter if this is the user's "Add Story" circle.
+    // The @Exclude annotation prevents this field from being saved to Firebase.
+    @get:Exclude
+    var isAddButton: Boolean = false
+) {
+    // Add a no-argument constructor, which is required by Firebase for deserialization.
+    constructor() : this("", "", "", null, "", 0L, false)
+}
 
 data class Message(
     var messageId: String = "",

@@ -1,122 +1,159 @@
 package com.example.i230572_i230689
+
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.os.Bundle
+import android.provider.MediaStore
+import android.util.Base64
+import android.util.Log
 import android.widget.ImageView
-import android.widget.LinearLayout
+import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import com.example.i230572_i230689.*
-import com.google.firebase.database.*
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.google.firebase.auth.FirebaseAuth
-import android.util.*
+import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.DatabaseError
+import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.ValueEventListener
+import java.io.ByteArrayOutputStream
 
 class FifthActivity : AppCompatActivity() {
+
+    private lateinit var recyclerViewStory: RecyclerView
+    private lateinit var storyAdapter: StoryAdapter
+    private lateinit var storyList: MutableList<Story>
+    private lateinit var auth: FirebaseAuth
+
+    // ActivityResultLauncher for picking an image from the gallery
+    private val galleryLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == RESULT_OK) {
+            val imageUri = result.data?.data
+            if (imageUri != null) {
+                // User has selected an image, now we need to process and upload it
+                val inputStream = contentResolver.openInputStream(imageUri)
+                val bitmap = BitmapFactory.decodeStream(inputStream)
+                uploadStory(bitmap)
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.main_page)
-        val db = FirebaseDatabase.getInstance().getReference("users")
-        val uid = FirebaseAuth.getInstance().currentUser?.uid
-        if (uid != null) {
-            db.child(uid).addListenerForSingleValueEvent(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    val followers = snapshot.child("followers").value
-                    val following = snapshot.child("following").value
-                    val followRequests = snapshot.child("followRequests").value
-                    val posts = snapshot.child("posts").value
-                    val stories = snapshot.child("stories").value
 
-                    Log.d("FirebaseData", "Followers: $followers")
-                    Log.d("FirebaseData", "Following: $following")
-                    Log.d("FirebaseData", "FollowRequests: $followRequests")
-                    Log.d("FirebaseData", "Posts: $posts")
-                    Log.d("FirebaseData", "Stories: $stories")
-                }
+        auth = FirebaseAuth.getInstance()
+        setupRecyclerView()
+        setupBottomNavigationBar()
 
-                override fun onCancelled(error: DatabaseError) {
-                    Log.e("FirebaseError", error.message)
-                }
-            })
-        } else {
-            Log.e("FirebaseError", "User not logged in")
+        // Fetch user data and then set up the stories
+        fetchUserDataAndSetupStories()
+    }
+
+    private fun setupRecyclerView() {
+        recyclerViewStory = findViewById(R.id.recycler_view_story)
+        recyclerViewStory.setHasFixedSize(true)
+        recyclerViewStory.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+        storyList = mutableListOf()
+        // Pass the galleryLauncher to the adapter
+        storyAdapter = StoryAdapter(this, storyList) {
+            openGallery()
         }
-        val Searchbtn: ImageView = findViewById(R.id.search_icon)
-        Searchbtn.setOnClickListener {
-            val intent = Intent(this, SixthActivity::class.java)
-            startActivity(intent)
+        recyclerViewStory.adapter = storyAdapter
+    }
 
+    private fun fetchUserDataAndSetupStories() {
+        val currentUser = auth.currentUser
+        if (currentUser == null) {
+            Log.e("FifthActivity", "User not logged in.")
+            // Optionally, redirect to login screen
+            return
         }
 
-        val Profile_btn: de.hdodenhof.circleimageview.CircleImageView = findViewById(R.id.profile_icon)
-        Profile_btn.setOnClickListener {
-            val intent = Intent(this, LastActivity::class.java)
-            startActivity(intent)
+        val userId = currentUser.uid
+        val userRef = FirebaseDatabase.getInstance().getReference("users").child(userId)
 
+        userRef.addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val username = snapshot.child("name").getValue(String::class.java) ?: "User"
+                // Fetch the profile picture bitmap string
+                val pfpBitmapString = snapshot.child("imageBase64").getValue(String::class.java)
+
+                // The first item is always the user's "add story" button
+                val userStory = Story(
+                    userId = userId,
+                    username = username, // Use fetched username
+                    userProfilePicture = pfpBitmapString, // Pass the PFP bitmap string
+                    isAddButton = true
+                )
+                storyList.add(userStory)
+
+                // TODO: Fetch stories from other users that are less than 24 hours old
+                // For now, we just update the adapter with the user's story circle
+                storyAdapter.notifyDataSetChanged()
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                Log.e("FirebaseError", "Failed to load user data: ${error.message}")
+                // Add a default story item even if the fetch fails
+                storyList.add(Story(userId = userId, username = "Your Story", isAddButton = true))
+                storyAdapter.notifyDataSetChanged()
+            }
+        })
+    }
+
+    private fun openGallery() {
+        val intent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
+        galleryLauncher.launch(intent)
+    }
+
+    private fun uploadStory(bitmap: Bitmap) {
+        val baos = ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 50, baos) // Compress the image
+        val byteArray = baos.toByteArray()
+        val bitmapString = Base64.encodeToString(byteArray, Base64.DEFAULT)
+
+        val currentUser = auth.currentUser ?: return
+        val userId = currentUser.uid
+        val storyRef = FirebaseDatabase.getInstance().getReference("stories")
+        val storyId = storyRef.push().key ?: ""
+
+        val newStory = Story(
+            storyId = storyId,
+            userId = userId,
+            storyImage = bitmapString, // The bitmap string of the story image
+            timestamp = System.currentTimeMillis()
+        )
+
+        storyRef.child(storyId).setValue(newStory).addOnCompleteListener { task ->
+            if (task.isSuccessful) {
+                Toast.makeText(this, "Story Uploaded!", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "Upload failed.", Toast.LENGTH_SHORT).show()
+            }
         }
-        val messagebtn: ImageView = findViewById(R.id.share)
-        messagebtn.setOnClickListener {
-            val intent = Intent(this, EightActivity::class.java)
-            startActivity(intent)
+    }
 
-        }
-        val like_btn: ImageView = findViewById(R.id.like_icon)
-        like_btn.setOnClickListener {
-            val intent = Intent(this, EleventhActivity::class.java)
-            startActivity(intent)
+    private fun setupBottomNavigationBar() {
+        // --- Your existing code for button listeners ---
+        val searchBtn: ImageView = findViewById(R.id.search_icon)
+        searchBtn.setOnClickListener { startActivity(Intent(this, SixthActivity::class.java)) }
 
-        }
-        val create_post_btn: ImageView = findViewById(R.id.post_icon)
-        create_post_btn.setOnClickListener {
-            val intent = Intent(this, FifteenthActivity::class.java)
-            startActivity(intent)
+        val profileBtn: de.hdodenhof.circleimageview.CircleImageView = findViewById(R.id.profile_icon)
+        profileBtn.setOnClickListener { startActivity(Intent(this, LastActivity::class.java)) }
 
-        }
-        val camera_btn: ImageView = findViewById(R.id.camera)
-        camera_btn.setOnClickListener {
-            val intent = Intent(this, SixteenActivity::class.java)
-            startActivity(intent)
+        val messageBtn: ImageView = findViewById(R.id.share)
+        messageBtn.setOnClickListener { startActivity(Intent(this, EightActivity::class.java)) }
 
-        }
-        val story_btn_1: LinearLayout  = findViewById(R.id.s_1)
-        story_btn_1.setOnClickListener {
-            val intent = Intent(this, NineteenActivity::class.java)
-            startActivity(intent)
+        val likeBtn: ImageView = findViewById(R.id.like_icon)
+        likeBtn.setOnClickListener { startActivity(Intent(this, EleventhActivity::class.java)) }
 
-        }
-        val story_btn_2: LinearLayout  = findViewById(R.id.s_2)
-        story_btn_2.setOnClickListener {
-            val intent = Intent(this, SeventeenActivity::class.java)
-            startActivity(intent)
+        val createPostBtn: ImageView = findViewById(R.id.post_icon)
+        createPostBtn.setOnClickListener { startActivity(Intent(this, FifteenthActivity::class.java)) }
 
-        }
-        val story_btn_3: LinearLayout  = findViewById(R.id.s_3)
-        story_btn_3.setOnClickListener {
-            val intent = Intent(this, SeventeenActivity::class.java)
-            startActivity(intent)
-
-        }
-        val story_btn_4: LinearLayout  = findViewById(R.id.s_4)
-        story_btn_4.setOnClickListener {
-            val intent = Intent(this, SeventeenActivity::class.java)
-            startActivity(intent)
-
-        }
-        val story_btn_5: LinearLayout = findViewById(R.id.s_5)
-        story_btn_5.setOnClickListener {
-            val intent = Intent(this, SeventeenActivity::class.java)
-            startActivity(intent)
-
-        }
-        val story_btn_6: LinearLayout = findViewById(R.id.s_6)
-        story_btn_6.setOnClickListener {
-            val intent = Intent(this, SeventeenActivity::class.java)
-            startActivity(intent)
-
-        }
-        val story_btn_7: LinearLayout = findViewById(R.id.s_7)
-        story_btn_7.setOnClickListener {
-            val intent = Intent(this, SeventeenActivity::class.java)
-            startActivity(intent)
-
-        }
-
+        val cameraBtn: ImageView = findViewById(R.id.camera)
+        cameraBtn.setOnClickListener { startActivity(Intent(this, SixteenActivity::class.java)) }
     }
 }
