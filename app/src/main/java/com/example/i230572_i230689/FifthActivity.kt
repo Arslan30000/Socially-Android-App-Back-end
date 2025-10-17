@@ -53,7 +53,7 @@ class FifthActivity : AppCompatActivity() {
         }
         val messagebtn: ImageView = findViewById(R.id.share)
         messagebtn.setOnClickListener {
-            val intent = Intent(this, EightAvtivity::class.java)
+            val intent = Intent(this, EightActivity::class.java)
             startActivity(intent)
 
         }

@@ -64,31 +64,14 @@
             android:background="@drawable/info">
         </ImageView>
     </RelativeLayout>
-    <TextView
-        android:id="@+id/time_stamp"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-       android:layout_above="@id/message_bubble"
-        android:layout_centerHorizontal="true"
-        android:text="@string/time"
-        android:textSize="12sp"
-        android:layout_marginBottom="10dp"
-        android:textColor="@color/black">
-    </TextView>
-    <TextView
-        android:id="@+id/message_bubble"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_alignParentEnd="true"
-        android:layout_marginEnd="30dp"
-        android:layout_marginBottom="10dp"
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/chat_recycler_view"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_below="@id/top_bar"
         android:layout_above="@id/message_bar"
-        android:background="@drawable/chat_bubble"
-        android:text="@string/Hello"
-        android:gravity="center"
         android:padding="10dp"
-        android:textColor="@color/white">
-    </TextView>
+        android:clipToPadding="false"/>
     <RelativeLayout
         android:id="@+id/message_bar"
         android:layout_width="350dp"

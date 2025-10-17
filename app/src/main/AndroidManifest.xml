@@ -45,7 +45,7 @@
             android:exported="true">
         </activity>
         <activity
-            android:name=".EightAvtivity"
+            android:name=".EightActivity"
             android:exported="true">
         </activity>
         <activity

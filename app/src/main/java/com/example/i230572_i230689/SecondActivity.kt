@@ -141,7 +141,8 @@ class SecondActivity : AppCompatActivity() {
                     "bio" to "",
                     "posts" to mutableMapOf<String, Post >(),
                     "stories" to mutableMapOf<String, Story>(),
-                    "followRequests" to mutableMapOf<String, Boolean>()
+                    "followRequests" to mutableMapOf<String, Boolean>(),
+                    "chats" to mutableMapOf<String, Chat>(),
                 )
 
                 dbRef.child(uid).setValue(newUser)
