@@ -6,12 +6,7 @@ data class Post(
     var timestamp: Long = 0
 )
 
-data class Story(
-    var storyId: String = "",
-    var imageBase64: String = "",
-    var timestamp: Long = 0,
-    var expiresAt: Long = 0
-)
+data class Story(val username: String, val imageUrl: String)
 data class User(
     var uid: String = "",
     var name: String = "",
