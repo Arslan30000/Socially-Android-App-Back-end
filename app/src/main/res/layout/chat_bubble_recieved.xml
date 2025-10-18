@@ -2,21 +2,39 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:gravity="start"
-    android:padding="5dp">
+    android:orientation="horizontal"
+    android:padding="8dp">
 
     <de.hdodenhof.circleimageview.CircleImageView
         android:id="@+id/profile_pic"
-        android:layout_width="32dp"
-        android:layout_height="32dp"
-        android:src="@drawable/profile_image"
-        android:layout_marginEnd="5dp"/>
-
-    <TextView
-        android:id="@+id/message_bubble"
+        android:layout_width="35dp"
+        android:layout_height="35dp"
+        android:layout_marginEnd="6dp" />
+    <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:background="@drawable/chat_bubble"
-        android:textColor="@color/black"
-        android:padding="10dp"
-        android:text="Received message"/>
+        android:orientation="vertical">
+        <TextView
+            android:id="@+id/message_bubble"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/chat_bubble"
+            android:padding="10dp"
+            android:textColor="@android:color/black"
+            android:textSize="16sp"
+            android:maxWidth="250dp"
+            android:visibility="gone" />
+
+        <ImageView
+            android:id="@+id/image_message"
+            android:layout_width="200dp"
+            android:layout_height="200dp"
+            android:layout_marginTop="4dp"
+            android:layout_marginBottom="4dp"
+            android:scaleType="centerCrop"
+            android:adjustViewBounds="true"
+            android:visibility="gone"
+            android:background="@drawable/chat_bubble"
+            android:contentDescription="Received image" />
+    </LinearLayout>
 </LinearLayout>

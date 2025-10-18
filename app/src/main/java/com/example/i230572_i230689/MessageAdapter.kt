@@ -5,6 +5,7 @@ import android.util.Base64
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import de.hdodenhof.circleimageview.CircleImageView
@@ -22,11 +23,13 @@ class MessageAdapter(
 
     inner class SentViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         val text: TextView = itemView.findViewById(R.id.message_bubble)
+        val image: ImageView? = itemView.findViewById(R.id.image_message)
     }
 
     inner class ReceivedViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         val profileImage: CircleImageView = itemView.findViewById(R.id.profile_pic)
         val text: TextView = itemView.findViewById(R.id.message_bubble)
+        val image: ImageView? = itemView.findViewById(R.id.image_message)
     }
 
     override fun getItemViewType(position: Int): Int {
@@ -47,16 +50,36 @@ class MessageAdapter(
 
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
         val message = messages[position]
+
         if (holder is SentViewHolder) {
-            holder.text.text = message.text
+            bindMessage(holder.text, holder.image, message)
         } else if (holder is ReceivedViewHolder) {
-            holder.text.text = message.text
+            bindMessage(holder.text, holder.image, message)
             val user = usersMap[message.senderId]
             if (user != null && user.imageBase64.isNotEmpty()) {
                 val bytes = Base64.decode(user.imageBase64, Base64.DEFAULT)
                 val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                 holder.profileImage.setImageBitmap(bitmap)
             }
+        }
+    }
+    private fun bindMessage(textView: TextView, imageView: ImageView?, message: Message) {
+        if (message.text.isNotEmpty()) {
+            textView.visibility = View.VISIBLE
+            textView.text = message.text
+        } else {
+            textView.visibility = View.GONE
+        }
+        if (message.imageBase64.isNotEmpty()) {
+            imageView?.visibility = View.VISIBLE
+            val bytes = Base64.decode(message.imageBase64, Base64.DEFAULT)
+            val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            imageView?.setImageBitmap(bitmap)
+
+            imageView?.adjustViewBounds = true
+            imageView?.scaleType = ImageView.ScaleType.CENTER_CROP
+        } else {
+            imageView?.visibility = View.GONE
         }
     }
 
