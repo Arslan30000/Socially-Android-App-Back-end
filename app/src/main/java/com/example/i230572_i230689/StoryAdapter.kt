@@ -1,8 +1,10 @@
 package com.example.i230572_i230689
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.BitmapFactory
 import android.util.Base64
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -11,17 +13,16 @@ import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import de.hdodenhof.circleimageview.CircleImageView
 
-// The adapter now accepts a lambda function `onAddStoryClick`
 class StoryAdapter(
     private val context: Context,
-    private val storyList: List<Story>,
+    private val stories: List<Story>,
     private val onAddStoryClick: () -> Unit
 ) : RecyclerView.Adapter<StoryAdapter.StoryViewHolder>() {
 
     class StoryViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-        val storyImage: CircleImageView = itemView.findViewById(R.id.story_image)
-        val storyUsername: TextView = itemView.findViewById(R.id.story_username)
-        val addStoryButton: ImageView = itemView.findViewById(R.id.story_add)
+        val userImage: CircleImageView = itemView.findViewById(R.id.story_image)
+        val userName: TextView = itemView.findViewById(R.id.story_username)
+        val addStoryPlusIcon: ImageView = itemView.findViewById(R.id.story_add)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): StoryViewHolder {
@@ -29,47 +30,56 @@ class StoryAdapter(
         return StoryViewHolder(view)
     }
 
-    override fun getItemCount(): Int {
-        return storyList.size
-    }
-
     override fun onBindViewHolder(holder: StoryViewHolder, position: Int) {
-        val story = storyList[position]
+        val story = stories[position]
+        holder.userName.text = story.username
 
         if (story.isAddButton) {
-            // This is the "Your Story" circle
-            holder.storyUsername.text = "Your Story"
-            holder.addStoryButton.visibility = View.VISIBLE
+            // --- THIS IS THE "YOUR STORY" CIRCLE ---
+            holder.addStoryPlusIcon.visibility = View.VISIBLE
+            // The plus icon ALWAYS opens the gallery to add a new story.
+            holder.addStoryPlusIcon.setOnClickListener { onAddStoryClick() }
 
-            // Decode and set the user's profile picture
-            try {
-                if (!story.userProfilePicture.isNullOrEmpty()) {
-                    val imageBytes = Base64.decode(story.userProfilePicture, Base64.DEFAULT)
-                    val bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
-                    holder.storyImage.setImageBitmap(bitmap)
-                } else {
-                    holder.storyImage.setImageResource(R.drawable.profile_image) // Fallback
+            // Check if a userId is present. If so, it means the user has stories.
+            if (story.userId.isNotEmpty()) {
+                // The main image click should open the user's stories for viewing.
+                holder.userImage.setOnClickListener {
+                    val intent = Intent(context, NineteenActivity::class.java).apply {
+                        putExtra("USER_ID", story.userId)
+                    }
+                    context.startActivity(intent)
                 }
-            } catch (e: Exception) {
-                holder.storyImage.setImageResource(R.drawable.profile_image) // Fallback on error
-            }
-
-            // Set the click listener to trigger the lambda function
-            holder.addStoryButton.setOnClickListener {
-                onAddStoryClick()
-            }
-            holder.storyImage.setOnClickListener {
-                onAddStoryClick() // Also allow clicking the image to add a story
+            } else {
+                // No userId present, so the user has no stories.
+                // The main image click can either do nothing or also open the gallery.
+                holder.userImage.setOnClickListener { onAddStoryClick() }
             }
 
         } else {
-            // This is a story from another user
-            holder.storyUsername.text = story.username
-            holder.addStoryButton.visibility = View.GONE
+            // --- THIS IS A STORY FROM A FOLLOWED USER ---
+            holder.addStoryPlusIcon.visibility = View.GONE
+            // The entire item click opens their stories for viewing.
+            holder.itemView.setOnClickListener {
+                val intent = Intent(context, NineteenActivity::class.java).apply {
+                    putExtra("USER_ID", story.userId)
+                }
+                context.startActivity(intent)
+            }
+        }
 
-            // Here you would decode and load story.storyImage
-            // For now, it remains a placeholder
-            holder.storyImage.setImageResource(R.drawable.profile_image)
+        // Image decoding logic (remains the same)
+        if (!story.userProfilePicture.isNullOrEmpty()) {
+            try {
+                val imageBytes = Base64.decode(story.userProfilePicture, Base64.DEFAULT)
+                val bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+                holder.userImage.setImageBitmap(bitmap)
+            } catch (e: Exception) {
+                holder.userImage.setImageResource(R.drawable.profile_image)
+            }
+        } else {
+            holder.userImage.setImageResource(R.drawable.profile_image)
         }
     }
+
+    override fun getItemCount(): Int = stories.size
 }
