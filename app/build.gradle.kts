@@ -50,6 +50,7 @@ dependencies {
     implementation("com.google.firebase:firebase-auth:23.0.0")
     implementation ("com.google.firebase:firebase-database:21.0.0")
     implementation("io.agora.rtc:full-sdk:4.6.0")
+    implementation("com.google.firebase:firebase-messaging:23.4.1")
 
 
 }

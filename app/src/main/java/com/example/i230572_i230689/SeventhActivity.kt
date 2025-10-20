@@ -85,15 +85,12 @@ class SeventhActivity : AppCompatActivity() {
                 val username = userSnap.child("username").value?.toString() ?: continue
                 val targetUid = userSnap.key ?: continue
 
-                // ✅ Skip yourself
                 if (targetUid == currentUid) continue
 
-                // ✅ Exact username match only
                 if (username.equals(query, ignoreCase = true) && !addedUids.contains(targetUid)) {
                     addedUids.add(targetUid)
                     val imageBase64 = userSnap.child("imageBase64").value?.toString()
 
-                    // Check if already requested
                     val followRequests = userSnap.child("followRequests")
                     val alreadyRequested = followRequests.hasChild(currentUid)
 

@@ -1,10 +1,16 @@
 package com.example.i230572_i230689
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.widget.ImageView
 import android.widget.RelativeLayout
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.firebase.auth.FirebaseAuth
@@ -32,7 +38,7 @@ class TwelfthActivity : AppCompatActivity() {
         recyclerView.adapter = adapter
 
         loadFollowRequests()
-
+        listenForNewRequests()
         setupNavigation()
     }
 
@@ -53,7 +59,7 @@ class TwelfthActivity : AppCompatActivity() {
                                             uid = user.uid,
                                             username = user.username,
                                             imageBase64 = user.imageBase64,
-                                            timestamp = System.currentTimeMillis() // Replace later with actual
+                                            timestamp = System.currentTimeMillis()
                                         )
                                     )
                                     adapter.notifyDataSetChanged()
@@ -64,23 +70,67 @@ class TwelfthActivity : AppCompatActivity() {
                     }
                 }
             }
-
             override fun onCancelled(error: DatabaseError) {}
         })
+    }
+
+    private fun listenForNewRequests() {
+        val uid = auth.currentUser?.uid ?: return
+        db.child("users").child(uid).child("followRequests")
+            .addChildEventListener(object : ChildEventListener {
+                override fun onChildAdded(snapshot: DataSnapshot, previousChildName: String?) {
+                    val requesterId = snapshot.key ?: return
+                    if (snapshot.value == true) {
+                        db.child("users").child(requesterId).child("username").get()
+                            .addOnSuccessListener {
+                                val name = it.value?.toString() ?: "Someone"
+                                showNotification("New Follow Request", "$name sent you a follow request")
+                            }
+                    }
+                }
+                override fun onChildChanged(snapshot: DataSnapshot, previousChildName: String?) {}
+                override fun onChildRemoved(snapshot: DataSnapshot) {}
+                override fun onChildMoved(snapshot: DataSnapshot, previousChildName: String?) {}
+                override fun onCancelled(error: DatabaseError) {}
+            })
     }
 
     private fun acceptFollowRequest(request: FollowRequest) {
         val currentUid = auth.currentUser?.uid ?: return
         val requesterUid = request.uid
 
-
         db.child("users").child(currentUid).child("followers").child(requesterUid).setValue(true)
         db.child("users").child(requesterUid).child("following").child(currentUid).setValue(true)
-
         db.child("users").child(currentUid).child("followRequests").child(requesterUid).removeValue()
 
         requestsList.remove(request)
         adapter.notifyDataSetChanged()
+    }
+
+    private fun showNotification(title: String, body: String) {
+        val channelId = "follow_notifications"
+        val notificationId = System.currentTimeMillis().toInt()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                channelId,
+                "Follow Notifications",
+                NotificationManager.IMPORTANCE_HIGH
+            )
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.createNotificationChannel(channel)
+        }
+
+        val builder = NotificationCompat.Builder(this, channelId)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+
+        with(NotificationManagerCompat.from(this)) {
+            notify(notificationId, builder.build())
+        }
     }
 
     private fun setupNavigation() {

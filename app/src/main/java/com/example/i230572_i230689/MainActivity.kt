@@ -26,6 +26,6 @@ class MainActivity : AppCompatActivity() {
                 startActivity(Intent(this, FourthActivity::class.java))
                 finish()
             }
-        }, 2000)
+        }, 5000)
     }
 }

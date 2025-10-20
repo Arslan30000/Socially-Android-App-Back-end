@@ -2,11 +2,7 @@ package com.example.i230572_i230689
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.graphics.BitmapFactory
-import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
-import android.util.Base64
+import android.os.*
 import android.view.SurfaceView
 import android.view.View
 import android.widget.*
@@ -21,116 +17,112 @@ import io.agora.rtc2.video.VideoCanvas
 class TenthActivity : AppCompatActivity() {
 
     private var rtcEngine: RtcEngine? = null
+    private lateinit var remoteView: FrameLayout
+    private lateinit var localView: FrameLayout
+    private lateinit var videoTimer: TextView
+    private lateinit var audioTimer: TextView
+    private lateinit var videoEndBtn: ImageButton
+    private lateinit var audioEndBtn: ImageButton
+    private lateinit var audioLayout: LinearLayout
+    private lateinit var videoLayout: RelativeLayout
+    private lateinit var receiverName: TextView
+    private lateinit var receiverImage: ImageView
 
-    private val appId = "3c8d97fe7f6043af99d0c97bf0eaf75c"
-    private val channelName = "test_channel"
-    private val token: String? = "95dbece7dd15473a8317e1510f80c38f"
+    private var isVideoCall = false
+    private var isJoined = false
+    private var callTimerHandler = Handler(Looper.getMainLooper())
+    private var secondsPassed = 0
+    private var otherUserId = ""
+    private var currentUserId = ""
+    private val appId = "91803c0e31234583aab3d8e36549097d"
+
+    private val token = "007eJxTYPBJvcvFHWlhbCXaZtCtUhAosefovD1OE8PlStzdGNMf8iswWBpaGBgnG6QaGxoZm5haGCcmJhmnWKQam5maWBpYmqcUCX7LaAhkZFj17g8DIxSC+CwMJanFJQwMANs2G5M="
+
     private val uid = 0
 
-    private var isVideoCall = true
-    private var otherUserId = ""
-    private val currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: ""
-
-    private lateinit var remoteVideoView: FrameLayout
-    private lateinit var localVideoView: FrameLayout
-    private lateinit var audioLayout: LinearLayout
-    private lateinit var callerName: TextView
-    private lateinit var callerPhoto: ImageView
-    private lateinit var declineBtn: ImageView
-    private lateinit var soundBtn: ImageView
-    private lateinit var optionsBtn: ImageView
-    private lateinit var callTimer: TextView
-
-    private var startTime = 0L
-    private val handler = Handler(Looper.getMainLooper())
-    private var timerRunning = false
+    private val channelName = "test"
 
     private lateinit var callRef: DatabaseReference
-    private var callListener: ValueEventListener? = null
+
+    private val rtcEventHandler = object : IRtcEngineEventHandler() {
+        override fun onJoinChannelSuccess(channel: String?, uid: Int, elapsed: Int) {
+            runOnUiThread {
+                Toast.makeText(this@TenthActivity, "✅ Joined Channel Successfully", Toast.LENGTH_SHORT).show()
+                startTimer()
+            }
+        }
+
+        override fun onUserJoined(uid: Int, elapsed: Int) {
+            runOnUiThread {
+                Toast.makeText(this@TenthActivity, "👤 User Joined", Toast.LENGTH_SHORT).show()
+                setupRemoteVideo(uid)
+            }
+        }
+
+        override fun onUserOffline(uid: Int, reason: Int) {
+            runOnUiThread {
+                Toast.makeText(this@TenthActivity, "🚫 User Left", Toast.LENGTH_SHORT).show()
+                endCall()
+            }
+        }
+
+        override fun onError(err: Int) {
+            runOnUiThread {
+                Toast.makeText(this@TenthActivity, "⚠️ Agora Error: $err", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.call_page)
 
-        remoteVideoView = findViewById(R.id.remote_video_view)
-        localVideoView = findViewById(R.id.local_video_view)
+        remoteView = findViewById(R.id.remote_video_view)
+        localView = findViewById(R.id.local_video_view)
+        videoTimer = findViewById(R.id.video_timer_text)
+        audioTimer = findViewById(R.id.audio_timer_text)
+        videoEndBtn = findViewById(R.id.video_end_button)
+        audioEndBtn = findViewById(R.id.audio_end_button)
         audioLayout = findViewById(R.id.audio_layout)
-        callerName = findViewById(R.id.caller_name)
-        callerPhoto = findViewById(R.id.caller_photo)
-        declineBtn = findViewById(R.id.decline)
-        soundBtn = findViewById(R.id.sound)
-        optionsBtn = findViewById(R.id.options_5)
-        callTimer = findViewById(R.id.time)
+        videoLayout = findViewById(R.id.video_layout)
+        receiverName = findViewById(R.id.receiver_name)
+        receiverImage = findViewById(R.id.receiver_image)
 
         isVideoCall = intent.getBooleanExtra("isVideoCall", true)
         otherUserId = intent.getStringExtra("otherUserId") ?: ""
-        val uname = intent.getStringExtra("username") ?: "Unknown"
-        val imgBase64 = intent.getStringExtra("imageBase64") ?: ""
+        currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: ""
 
-        callerName.text = uname
-        if (imgBase64.isNotEmpty()) {
-            try {
-                val bytes = Base64.decode(imgBase64, Base64.DEFAULT)
-                val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                callerPhoto.setImageBitmap(bmp)
-            } catch (_: Exception) {}
+        callRef = FirebaseDatabase.getInstance().getReference("calls/$currentUserId")
+
+        requestPermissions()
+        setupFirebaseListener()
+
+        videoEndBtn.setOnClickListener { endCall() }
+        audioEndBtn.setOnClickListener { endCall() }
+    }
+
+    private fun requestPermissions() {
+        val permissions = mutableListOf(Manifest.permission.RECORD_AUDIO)
+        if (isVideoCall) permissions.add(Manifest.permission.CAMERA)
+
+        val missing = permissions.filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
 
-        if (checkPermissions()) initAgora()
-        else ActivityCompat.requestPermissions(this, REQUESTED_PERMISSIONS, 1)
-
-        declineBtn.setOnClickListener { endCall() }
-        setupFirebaseCallSignal()
+        if (missing.isNotEmpty()) {
+            ActivityCompat.requestPermissions(this, missing.toTypedArray(), 1)
+        } else {
+            initAgora()
+        }
     }
 
-    private fun setupFirebaseCallSignal() {
-        callRef = FirebaseDatabase.getInstance().getReference("calls")
-
-        val callData = mapOf(
-            "callerId" to currentUserId,
-            "receiverId" to otherUserId,
-            "isVideo" to isVideoCall,
-            "status" to "ongoing"
-        )
-        val callId = if (currentUserId < otherUserId)
-            "${currentUserId}_$otherUserId" else "${otherUserId}_$currentUserId"
-
-        callRef.child(callId).setValue(callData)
-
-        callListener = callRef.child(callId).addValueEventListener(object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val status = snapshot.child("status").getValue(String::class.java)
-                if (status == "ended") {
-                    endCall()
-                }
-            }
-
-            override fun onCancelled(error: DatabaseError) {}
-        })
-    }
-
-    private fun loadUserInfoFromFirebase(userId: String) {
-        val dbRef = FirebaseDatabase.getInstance().getReference("users").child(userId)
-        dbRef.addListenerForSingleValueEvent(object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                if (!snapshot.exists()) return
-                val uname = snapshot.child("username").getValue(String::class.java)
-                    ?: snapshot.child("name").getValue(String::class.java)
-                    ?: "Unknown"
-                val imgBase64 = snapshot.child("profileImage").getValue(String::class.java)
-                    ?: snapshot.child("imageBase64").getValue(String::class.java)
-                    ?: ""
-                callerName.text = uname
-                if (imgBase64.isNotEmpty()) {
-                    try {
-                        val bytes = Base64.decode(imgBase64, Base64.DEFAULT)
-                        val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                        callerPhoto.setImageBitmap(bmp)
-                    } catch (_: Exception) {}
-                }
-            }
-            override fun onCancelled(error: DatabaseError) {}
-        })
+    override fun onRequestPermissionsResult(reqCode: Int, perms: Array<out String>, res: IntArray) {
+        if (reqCode == 1 && res.all { it == PackageManager.PERMISSION_GRANTED }) {
+            initAgora()
+        } else {
+            Toast.makeText(this, "Permissions denied", Toast.LENGTH_SHORT).show()
+            finish()
+        }
     }
 
     private fun initAgora() {
@@ -140,114 +132,101 @@ class TenthActivity : AppCompatActivity() {
                 mAppId = appId
                 mEventHandler = rtcEventHandler
             }
+
             rtcEngine = RtcEngine.create(config)
             rtcEngine?.setChannelProfile(Constants.CHANNEL_PROFILE_COMMUNICATION)
             rtcEngine?.setClientRole(Constants.CLIENT_ROLE_BROADCASTER)
 
+            if (isVideoCall) setupVideoMode() else setupAudioMode()
+
             val options = ChannelMediaOptions().apply {
                 channelProfile = Constants.CHANNEL_PROFILE_COMMUNICATION
                 clientRoleType = Constants.CLIENT_ROLE_BROADCASTER
+                autoSubscribeAudio = true
+                autoSubscribeVideo = isVideoCall
+                publishCameraTrack = isVideoCall
+                publishMicrophoneTrack = true
             }
 
-            if (isVideoCall) setupVideoMode() else setupAudioMode()
+            val res = rtcEngine?.joinChannel(token, channelName, uid, options)
+            if (res != 0) {
+                Toast.makeText(this, "Join failed: $res", Toast.LENGTH_LONG).show()
+            } else {
+                isJoined = true
+            }
 
-            rtcEngine?.joinChannel(token, channelName, uid, options)
         } catch (e: Exception) {
             e.printStackTrace()
+            Toast.makeText(this, "Agora init error: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 
     private fun setupVideoMode() {
         audioLayout.visibility = View.GONE
-        remoteVideoView.visibility = View.VISIBLE
-        localVideoView.visibility = View.VISIBLE
+        videoLayout.visibility = View.VISIBLE
+        val localSurface = SurfaceView(this)
+        localView.addView(localSurface)
         rtcEngine?.enableVideo()
-        val localView = SurfaceView(baseContext)
-        localVideoView.addView(localView)
-        rtcEngine?.setupLocalVideo(VideoCanvas(localView, VideoCanvas.RENDER_MODE_HIDDEN, 0))
+        rtcEngine?.setupLocalVideo(VideoCanvas(localSurface, VideoCanvas.RENDER_MODE_FIT, 0))
+        rtcEngine?.startPreview()
     }
 
     private fun setupAudioMode() {
+        videoLayout.visibility = View.GONE
         audioLayout.visibility = View.VISIBLE
-        remoteVideoView.visibility = View.GONE
-        localVideoView.visibility = View.GONE
         rtcEngine?.disableVideo()
     }
 
-    private val rtcEventHandler = object : IRtcEngineEventHandler() {
-        override fun onUserJoined(uid: Int, elapsed: Int) {
-            runOnUiThread {
-                val remoteView = SurfaceView(baseContext)
-                remoteVideoView.addView(remoteView)
-                rtcEngine?.setupRemoteVideo(
-                    VideoCanvas(remoteView, VideoCanvas.RENDER_MODE_HIDDEN, uid)
-                )
-            }
-        }
-
-        override fun onJoinChannelSuccess(channel: String?, uid: Int, elapsed: Int) {
-            runOnUiThread {
-                println("Joined channel successfully: $channel (uid=$uid)")
-                startTimer()
-            }
-        }
+    private fun setupRemoteVideo(uid: Int) {
+        remoteView.removeAllViews()
+        val surfaceView = SurfaceView(this)
+        remoteView.addView(surfaceView)
+        rtcEngine?.setupRemoteVideo(VideoCanvas(surfaceView, VideoCanvas.RENDER_MODE_FIT, uid))
     }
 
     private fun startTimer() {
-        startTime = System.currentTimeMillis()
-        timerRunning = true
-        handler.post(object : Runnable {
+        callTimerHandler.post(object : Runnable {
             override fun run() {
-                if (timerRunning) {
-                    val elapsed = (System.currentTimeMillis() - startTime) / 1000
-                    val minutes = elapsed / 60
-                    val seconds = elapsed % 60
-                    callTimer.text = String.format("%02d:%02d", minutes, seconds)
-                    handler.postDelayed(this, 1000)
-                }
+                secondsPassed++
+                val min = secondsPassed / 60
+                val sec = secondsPassed % 60
+                val time = String.format("%02d:%02d", min, sec)
+                if (isVideoCall) videoTimer.text = time else audioTimer.text = time
+                callTimerHandler.postDelayed(this, 1000)
             }
         })
     }
 
-    private fun stopTimer() {
-        timerRunning = false
-        handler.removeCallbacksAndMessages(null)
-    }
-
-    private fun checkPermissions(): Boolean {
-        return REQUESTED_PERMISSIONS.all {
-            ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
-        }
-    }
-
     private fun endCall() {
-        stopTimer()
-        val callId = if (currentUserId < otherUserId)
-            "${currentUserId}_$otherUserId" else "${otherUserId}_$currentUserId"
-        FirebaseDatabase.getInstance().getReference("calls").child(callId)
-            .child("status").setValue("ended")
-
+        callRef.removeValue()
         rtcEngine?.leaveChannel()
-        rtcEngine?.stopPreview()
         RtcEngine.destroy()
         rtcEngine = null
-
-        callListener?.let {
-            callRef.removeEventListener(it)
-        }
         finish()
+    }
+
+    private fun setupFirebaseListener() {
+        val otherCallRef = FirebaseDatabase.getInstance().getReference("calls/$otherUserId")
+        otherCallRef.child("status").onDisconnect().setValue("ended")
+
+        callRef.child("status").setValue("calling")
+        callRef.child("receiver").setValue(otherUserId)
+
+        otherCallRef.addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val status = snapshot.child("status").getValue(String::class.java)
+                val receiver = snapshot.child("receiver").getValue(String::class.java)
+                if (status == "calling" && receiver == currentUserId && !isJoined) {
+                    initAgora()
+                }
+            }
+
+            override fun onCancelled(error: DatabaseError) {}
+        })
     }
 
     override fun onDestroy() {
         super.onDestroy()
         endCall()
-    }
-
-    companion object {
-        private val REQUESTED_PERMISSIONS = arrayOf(
-            Manifest.permission.RECORD_AUDIO,
-            Manifest.permission.CAMERA,
-            Manifest.permission.INTERNET
-        )
     }
 }
