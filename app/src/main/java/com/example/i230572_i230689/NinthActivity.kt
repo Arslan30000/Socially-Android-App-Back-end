@@ -31,6 +31,7 @@ class NinthActivity : AppCompatActivity() {
     private val currentUserId = FirebaseAuth.getInstance().currentUser!!.uid
     private lateinit var otherUserId: String
     private lateinit var chatId: String
+    private val db = FirebaseDatabase.getInstance().reference
 
     private val PICK_IMAGE_REQUEST = 1001
 
@@ -62,11 +63,12 @@ class NinthActivity : AppCompatActivity() {
         galleryButton.setOnClickListener { openGallery() }
         videoButton.setOnClickListener { startCall(true) }
         audioButton.setOnClickListener { startCall(false) }
+
+        listenForIncomingCalls()
     }
 
-
     private fun loadOtherUser() {
-        FirebaseDatabase.getInstance().getReference("users/$otherUserId")
+        db.child("users").child(otherUserId)
             .addListenerForSingleValueEvent(object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
                     val user = snapshot.getValue(User::class.java) ?: return
@@ -79,55 +81,33 @@ class NinthActivity : AppCompatActivity() {
                             setImageBitmap(bmp)
                         }
                     }
-
                     findViewById<TextView>(R.id.chat_name).text = "${user.name} ${user.lastname}"
                 }
-
                 override fun onCancelled(error: DatabaseError) {}
             })
     }
 
-
     private fun loadMessages() {
-        FirebaseDatabase.getInstance().getReference("messages")
-            .orderByChild("chatId").equalTo(chatId)
+        db.child("messages").orderByChild("chatId").equalTo(chatId)
             .addValueEventListener(object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
                     messages.clear()
                     for (snap in snapshot.children) {
                         val msg = snap.getValue(Message::class.java) ?: continue
                         messages.add(msg)
-
-                        if (!usersMap.containsKey(msg.senderId)) {
-                            FirebaseDatabase.getInstance().getReference("users/${msg.senderId}")
-                                .addListenerForSingleValueEvent(object : ValueEventListener {
-                                    override fun onDataChange(userSnap: DataSnapshot) {
-                                        val user = userSnap.getValue(User::class.java)
-                                        if (user != null) {
-                                            usersMap[user.uid] = user
-                                            messageAdapter.notifyDataSetChanged()
-                                        }
-                                    }
-
-                                    override fun onCancelled(error: DatabaseError) {}
-                                })
-                        }
                     }
-
                     messageAdapter.notifyDataSetChanged()
                     recyclerView.scrollToPosition(messages.size - 1)
                 }
-
                 override fun onCancelled(error: DatabaseError) {}
             })
     }
-
 
     private fun sendMessage() {
         val text = messageInput.text.toString().trim()
         if (text.isEmpty()) return
 
-        val ref = FirebaseDatabase.getInstance().getReference("messages").push()
+        val ref = db.child("messages").push()
         val msgId = ref.key ?: return
         val timestamp = System.currentTimeMillis()
 
@@ -147,13 +127,11 @@ class NinthActivity : AppCompatActivity() {
         messageInput.text.clear()
     }
 
-
     private fun openGallery() {
         val i = Intent(Intent.ACTION_PICK)
         i.type = "image/*"
         startActivityForResult(i, PICK_IMAGE_REQUEST)
     }
-
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
@@ -168,7 +146,7 @@ class NinthActivity : AppCompatActivity() {
             val bytes = outputStream.toByteArray()
             val imgBase64 = Base64.encodeToString(bytes, Base64.DEFAULT)
 
-            val ref = FirebaseDatabase.getInstance().getReference("messages").push()
+            val ref = db.child("messages").push()
             val msgId = ref.key ?: return
             val timestamp = System.currentTimeMillis()
 
@@ -188,29 +166,61 @@ class NinthActivity : AppCompatActivity() {
         }
     }
 
-
     private fun updateChat(messageId: String, timestamp: Long) {
-        val currentRef = FirebaseDatabase.getInstance().getReference("users/$currentUserId/chats/$chatId")
-        val otherRef = FirebaseDatabase.getInstance().getReference("users/$otherUserId/chats/$chatId")
-
         val data = mapOf(
             "chatId" to chatId,
             "participants" to mapOf(currentUserId to true, otherUserId to true),
             "lastMessage" to messageId,
             "lastMessageTime" to timestamp
         )
-
-        currentRef.setValue(data)
-        otherRef.setValue(data)
+        db.child("users/$currentUserId/chats/$chatId").setValue(data)
+        db.child("users/$otherUserId/chats/$chatId").setValue(data)
     }
+
     private fun startCall(isVideo: Boolean) {
         val otherUser = usersMap[otherUserId] ?: return
+        val callId = if (currentUserId < otherUserId)
+            "${currentUserId}_$otherUserId" else "${otherUserId}_$currentUserId"
+
+        val callData = mapOf(
+            "callerId" to currentUserId,
+            "receiverId" to otherUserId,
+            "isVideo" to isVideo,
+            "status" to "ringing"
+        )
+
+        db.child("calls").child(callId).setValue(callData)
+
         val i = Intent(this, TenthActivity::class.java).apply {
             putExtra("isVideoCall", isVideo)
             putExtra("otherUserId", otherUserId)
             putExtra("username", "${otherUser.name} ${otherUser.lastname}")
-            putExtra("imageBase64", otherUser.imageBase64)
+            putExtra("channelName", callId)
         }
         startActivity(i)
+    }
+
+    private fun listenForIncomingCalls() {
+        db.child("calls").addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                for (callSnap in snapshot.children) {
+                    val caller = callSnap.child("callerId").getValue(String::class.java) ?: continue
+                    val receiver = callSnap.child("receiverId").getValue(String::class.java) ?: continue
+                    val isVideo = callSnap.child("isVideo").getValue(Boolean::class.java) ?: true
+                    val status = callSnap.child("status").getValue(String::class.java) ?: "none"
+
+                    if (receiver == currentUserId && status == "ringing") {
+                        val i = Intent(this@NinthActivity, TenthActivity::class.java).apply {
+                            putExtra("isVideoCall", isVideo)
+                            putExtra("otherUserId", caller)
+                            putExtra("channelName", callSnap.key)
+                        }
+                        startActivity(i)
+                        callSnap.ref.child("status").setValue("ongoing")
+                    }
+                }
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        })
     }
 }
