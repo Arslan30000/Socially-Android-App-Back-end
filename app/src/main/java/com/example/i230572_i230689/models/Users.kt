@@ -1,11 +1,5 @@
 package com.example.i230572_i230689
 import com.google.firebase.database.Exclude
-data class Post(
-    var postId: String = "",
-    var imageBase64: String = "",
-    var caption: String = "",
-    var timestamp: Long = 0
-)
 
 data class Story(
     var storyId: String = "",
@@ -22,6 +16,30 @@ data class Story(
 ) {
     // Add a no-argument constructor, which is required by Firebase for deserialization.
     constructor() : this("", "", "", null, "", 0L, false)
+}
+
+data class Post(
+    var postId: String = "",
+    var userId: String = "",
+    var postImage: String = "", // The Base64 string of the main post image
+    var caption: String = "",
+    var timestamp: Long = 0L,
+
+    // We will populate these fields locally in the app, not from the /posts/ node.
+    // The @Exclude annotation is crucial to prevent Firebase from trying to save them.
+    @get:Exclude
+    var username: String = "",
+    @get:Exclude
+    var userProfileImage: String = "", // Base64 string for the author's PFP
+
+    // You can add these later as you build out features
+    @get:Exclude
+    var likesCount: Int = 0,
+    @get:Exclude
+    var commentsCount: Int = 0
+) {
+    // Required no-argument constructor for Firebase to work
+    constructor() : this("", "", "", "", 0L)
 }
 
 data class Message(
