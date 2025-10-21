@@ -196,7 +196,7 @@ class FifthActivity : AppCompatActivity() {
                 storyList.addAll(finalStoryList.sortedByDescending { it.timestamp }) // Then add the rest
                 storyAdapter.notifyDataSetChanged()
             }
-override fun onCancelled(error: DatabaseError) {
+            override fun onCancelled(error: DatabaseError) {
                 Log.e("FIREBASE", "Failed to match user profiles: ${error.message}")
             }
         })
@@ -207,7 +207,13 @@ override fun onCancelled(error: DatabaseError) {
         // 1. Fetch all posts, ordered by timestamp to get the newest first (by sorting later)
         postsRef.orderByChild("timestamp").addListenerForSingleValueEvent(object : ValueEventListener {
             override fun onDataChange(postsSnapshot: DataSnapshot) {
-                val allPosts = postsSnapshot.children.mapNotNull { it.getValue(Post::class.java) }
+                // THE FIX: Capture the snapshot key as the postId
+                val allPosts = postsSnapshot.children.mapNotNull { dataSnapshot ->
+                    dataSnapshot.getValue(Post::class.java)?.apply {
+                        postId = dataSnapshot.key ?: ""
+                    }
+                }
+
                 if (allPosts.isEmpty()) {
                     Log.d("PostFeed", "No posts found in database.")
                     postList.clear()

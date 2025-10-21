@@ -9,6 +9,7 @@ import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
+import com.google.firebase.database.FirebaseDatabase
 import de.hdodenhof.circleimageview.CircleImageView
 
 class PostAdapter(
@@ -20,6 +21,7 @@ class PostAdapter(
         val userPfp: CircleImageView = itemView.findViewById(R.id.post_user_pfp)
         val username: TextView = itemView.findViewById(R.id.post_username)
         val postImage: ImageView = itemView.findViewById(R.id.post_image)
+        val likeButton: ImageView = itemView.findViewById(R.id.post_like_button)
         val likesCount: TextView = itemView.findViewById(R.id.post_likes_count)
         val caption: TextView = itemView.findViewById(R.id.post_caption)
     }
@@ -34,16 +36,22 @@ class PostAdapter(
     override fun onBindViewHolder(holder: PostViewHolder, position: Int) {
         val post = posts[position]
 
-        // Set the text data
         holder.username.text = post.username
         holder.caption.text = post.caption
-        holder.likesCount.text = "${post.likesCount} likes" // Example
+        holder.likesCount.text = "${post.likesCount} likes"
 
-        // Decode and set the user's profile picture
         setImageFromBase64(post.userProfileImage, holder.userPfp, R.drawable.profile_image)
-
-        // Decode and set the main post image
         setImageFromBase64(post.postImage, holder.postImage, R.drawable.socially_logo)
+
+        holder.likeButton.setOnClickListener {
+            val newLikesCount = post.likesCount + 1
+            val postRef = FirebaseDatabase.getInstance().getReference("posts").child(post.postId)
+            postRef.child("likesCount").setValue(newLikesCount).addOnSuccessListener {
+                holder.likesCount.text = "$newLikesCount likes"
+                holder.likeButton.setImageResource(R.drawable.like_fillled)
+                holder.likeButton.isEnabled = false // Optional: disable after liking
+            }
+        }
     }
 
     private fun setImageFromBase64(
