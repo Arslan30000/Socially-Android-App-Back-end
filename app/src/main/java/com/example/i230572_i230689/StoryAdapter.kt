@@ -74,9 +74,11 @@ class StoryAdapter(
                 val bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
                 holder.userImage.setImageBitmap(bitmap)
             } catch (e: Exception) {
+                // If decoding fails, show a placeholder
                 holder.userImage.setImageResource(R.drawable.profile_image)
             }
         } else {
+            // If the string is null or empty, show a placeholder
             holder.userImage.setImageResource(R.drawable.profile_image)
         }
     }
