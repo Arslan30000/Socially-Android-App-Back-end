@@ -1,26 +1,28 @@
 package com.example.i230572_i230689
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.os.Build
 import android.os.Bundle
 import android.util.Base64
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
 import com.google.firebase.messaging.FirebaseMessaging
 import java.io.ByteArrayOutputStream
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.content.Context
-import android.graphics.Bitmap
-import android.os.Build
-import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
+
 
 class NinthActivity : AppCompatActivity() {
 
@@ -42,6 +44,7 @@ class NinthActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.chat_page)
+
 
         chatId = intent.getStringExtra("chatId") ?: ""
         otherUserId = intent.getStringExtra("otherUserId") ?: ""
