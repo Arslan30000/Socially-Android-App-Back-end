@@ -2,22 +2,20 @@ package com.example.i230572_i230689
 
 import android.content.Intent
 import android.os.Bundle
-import android.widget.*
+import android.widget.EditText
+import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.*
+import com.android.volley.DefaultRetryPolicy
+import com.android.volley.toolbox.StringRequest
+import com.android.volley.toolbox.Volley
+import org.json.JSONObject
 
 class FourthActivity : AppCompatActivity() {
-
-    private lateinit var auth: FirebaseAuth
-    private lateinit var dbRef: DatabaseReference
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.login_2)
-
-        auth = FirebaseAuth.getInstance()
-        dbRef = FirebaseDatabase.getInstance().getReference("users")
 
         val usernameInput = findViewById<EditText>(R.id.username_input)
         val passInput = findViewById<EditText>(R.id.password_input)
@@ -28,42 +26,49 @@ class FourthActivity : AppCompatActivity() {
         loginBtn.setOnClickListener {
             val username = usernameInput.text.toString().trim()
             val password = passInput.text.toString().trim()
-
             if (username.isEmpty() || password.isEmpty()) {
                 Toast.makeText(this, "Please enter username and password", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
 
-            dbRef.orderByChild("username").equalTo(username)
-                .addListenerForSingleValueEvent(object : ValueEventListener {
-                    override fun onDataChange(snapshot: DataSnapshot) {
-                        if (snapshot.exists()) {
-                            for (userSnap in snapshot.children) {
-                                val userData = userSnap.getValue(User::class.java)
-                                val email = userData?.email
-                                if (email != null) {
-                                    auth.signInWithEmailAndPassword(email, password)
-                                        .addOnSuccessListener {
-                                            startActivity(Intent(this@FourthActivity, ThirdActivity::class.java))
-                                            finish()
-                                        }
-                                        .addOnFailureListener {
-                                            Toast.makeText(this@FourthActivity, "Login failed: ${it.message}", Toast.LENGTH_SHORT).show()
-                                        }
-                                } else {
-                                    Toast.makeText(this@FourthActivity, "Email not found for this username", Toast.LENGTH_SHORT).show()
-                                }
-                                return
-                            }
-                        } else {
-                            Toast.makeText(this@FourthActivity, "Username not found", Toast.LENGTH_SHORT).show()
-                        }
-                    }
+            val data = HashMap<String, String>()
+            data["username"] = username
+            data["password"] = password
+            val url = "http://192.168.100.10/instagram_api/login.php"
+            val rq = Volley.newRequestQueue(this)
 
-                    override fun onCancelled(error: DatabaseError) {
-                        Toast.makeText(this@FourthActivity, "Database error: ${error.message}", Toast.LENGTH_SHORT).show()
+            val req = object : StringRequest(Method.POST, url,
+                { response ->
+                    try {
+                        val obj = JSONObject(response.trim())
+                        val ok = obj.optBoolean("success", false)
+                        if (ok) {
+                            val token = obj.optString("token", null)
+                            if (!token.isNullOrEmpty()) SessionManager(this).saveToken(token)
+                            val prefs = getSharedPreferences("user", MODE_PRIVATE)
+                            prefs.edit().putString("token", obj.getString("token"))
+                                .putInt("user_id", obj.getInt("user_id"))
+                                .apply()
+                            startActivity(Intent(this, ThirdActivity::class.java))
+                            finish()
+                        } else {
+                            Toast.makeText(this, obj.optString("message", "Login failed"), Toast.LENGTH_SHORT).show()
+                        }
+                    } catch (e: Exception) {
+                        Toast.makeText(this, "Invalid server response", Toast.LENGTH_SHORT).show()
                     }
-                })
+                },
+                { error ->
+                    val msg = error.networkResponse?.statusCode?.toString() ?: error.message
+                    Toast.makeText(this, "Network error: $msg", Toast.LENGTH_LONG).show()
+                }) {
+                override fun getParams(): MutableMap<String, String> {
+                    return data
+                }
+            }
+
+            req.retryPolicy = DefaultRetryPolicy(15000, DefaultRetryPolicy.DEFAULT_MAX_RETRIES, DefaultRetryPolicy.DEFAULT_BACKOFF_MULT)
+            rq.add(req)
         }
 
         signupBtn.setOnClickListener {
@@ -77,32 +82,22 @@ class FourthActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            dbRef.orderByChild("username").equalTo(username)
-                .addListenerForSingleValueEvent(object : ValueEventListener {
-                    override fun onDataChange(snapshot: DataSnapshot) {
-                        if (snapshot.exists()) {
-                            for (userSnap in snapshot.children) {
-                                val email = userSnap.child("email").getValue(String::class.java)
-                                if (email != null) {
-                                    auth.sendPasswordResetEmail(email)
-                                        .addOnSuccessListener {
-                                            Toast.makeText(this@FourthActivity, "Password reset email sent", Toast.LENGTH_SHORT).show()
-                                        }
-                                        .addOnFailureListener {
-                                            Toast.makeText(this@FourthActivity, "Failed to send reset email: ${it.message}", Toast.LENGTH_SHORT).show()
-                                        }
-                                }
-                                return
-                            }
-                        } else {
-                            Toast.makeText(this@FourthActivity, "Username not found", Toast.LENGTH_SHORT).show()
-                        }
+            val data = HashMap<String, String>()
+            data["username"] = username
+            val rq = Volley.newRequestQueue(this)
+            val req = object : StringRequest(Method.POST, "http://192.168.100.10/instagram_api/forgot_password.php",
+                { response ->
+                    try {
+                        val obj = JSONObject(response.trim())
+                        Toast.makeText(this, obj.optString("message", "Done"), Toast.LENGTH_SHORT).show()
+                    } catch (e: Exception) {
+                        Toast.makeText(this, "Invalid server response", Toast.LENGTH_SHORT).show()
                     }
-
-                    override fun onCancelled(error: DatabaseError) {}
-                })
+                },
+                { error -> Toast.makeText(this, "Network error: ${error.message}", Toast.LENGTH_SHORT).show() }) {
+                override fun getParams(): MutableMap<String, String> = data
+            }
+            rq.add(req)
         }
     }
-
-
 }

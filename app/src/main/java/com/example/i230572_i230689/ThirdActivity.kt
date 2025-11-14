@@ -7,16 +7,17 @@ import android.util.Base64
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.*
+import com.android.volley.Request
+import com.android.volley.toolbox.StringRequest
+import com.android.volley.toolbox.Volley
+import org.json.JSONObject
 
 class ThirdActivity : AppCompatActivity() {
 
     private lateinit var profileImg: ImageView
     private lateinit var usernameTxt: TextView
-    private lateinit var auth: FirebaseAuth
-    private lateinit var dbRef: DatabaseReference
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -28,46 +29,23 @@ class ThirdActivity : AppCompatActivity() {
         val switchBtn: TextView = findViewById(R.id.Switch_btn)
         val signupBtn: TextView = findViewById(R.id.sign_up_button)
 
-        auth = FirebaseAuth.getInstance()
-        dbRef = FirebaseDatabase.getInstance().getReference("users")
+        val sm = SessionManager(this)
+        val token = sm.getToken()
 
-        val currentUser = auth.currentUser
-
-        if (currentUser == null) {
+        if (token.isNullOrEmpty()) {
             startActivity(Intent(this, FourthActivity::class.java))
             finish()
             return
         }
 
-        dbRef.child(currentUser.uid).get().addOnSuccessListener { snapshot ->
-            if (snapshot.exists()) {
-                val username = snapshot.child("username").value?.toString()
-                val imageBase64 = snapshot.child("imageBase64").value?.toString()  // fixed key
-
-                usernameTxt.text = username ?: "No Name"
-
-                if (!imageBase64.isNullOrEmpty()) {
-                    try {
-                        val bytes = Base64.decode(imageBase64, Base64.DEFAULT)
-                        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                        profileImg.setImageBitmap(bitmap)
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
-                }
-            } else {
-                usernameTxt.text = "No user data found"
-            }
-        }.addOnFailureListener {
-            usernameTxt.text = "Failed to load"
-        }
+        loadUserData(token)
 
         nextBtn.setOnClickListener {
             startActivity(Intent(this, FifthActivity::class.java))
         }
 
         switchBtn.setOnClickListener {
-            auth.signOut()
+            sm.clear()
             startActivity(Intent(this, FourthActivity::class.java))
             finish()
         }
@@ -75,5 +53,39 @@ class ThirdActivity : AppCompatActivity() {
         signupBtn.setOnClickListener {
             startActivity(Intent(this, SecondActivity::class.java))
         }
+    }
+
+    private fun loadUserData(token: String) {
+        val url = "http://192.168.100.10/instagram_api/get_user.php"
+        val rq = Volley.newRequestQueue(this)
+        val req = object : StringRequest(Request.Method.GET, url,
+            { resp ->
+                try {
+                    val obj = JSONObject(resp)
+                    if (obj.optBoolean("success", false)) {
+                        val user = obj.getJSONObject("user")
+                        usernameTxt.text = user.optString("username", "No Name")
+
+                        val imgBase = user.optString("imageBase64", "")
+                        if (imgBase.isNotEmpty()) {
+                            val bytes = Base64.decode(imgBase, Base64.DEFAULT)
+                            val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                            profileImg.setImageBitmap(bitmap)
+                        }
+                    } else {
+                        Toast.makeText(this, "Failed to load user data", Toast.LENGTH_SHORT).show()
+                    }
+                } catch (e: Exception) {
+                    Toast.makeText(this, "Parse error", Toast.LENGTH_SHORT).show()
+                }
+            },
+            {
+                Toast.makeText(this, "Network error", Toast.LENGTH_SHORT).show()
+            }) {
+            override fun getHeaders(): MutableMap<String, String> {
+                return hashMapOf("Authorization" to "Bearer $token")
+            }
+        }
+        rq.add(req)
     }
 }

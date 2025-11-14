@@ -2,24 +2,21 @@ package com.example.i230572_i230689
 
 import android.app.DatePickerDialog
 import android.content.Intent
-import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
 import android.util.Base64
-import android.util.Log
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.*
+import com.android.volley.DefaultRetryPolicy
+import com.android.volley.toolbox.StringRequest
+import com.android.volley.toolbox.Volley
+import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.util.Calendar
 
 class SecondActivity : AppCompatActivity() {
-
-    private lateinit var auth: FirebaseAuth
-    private val dbRef = FirebaseDatabase.getInstance().getReference("users")
 
     private lateinit var usernameInput: EditText
     private lateinit var nameInput: EditText
@@ -33,14 +30,12 @@ class SecondActivity : AppCompatActivity() {
 
     private var encodedImage: String = ""
     private var isPasswordVisible = false
-    private val PICK_IMAGE_REQUEST = 1001
+    private val PICK_IMAGE = 1001
     private var selectedImageUri: Uri? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.sign_up)
-
-        auth = FirebaseAuth.getInstance()
 
         usernameInput = findViewById(R.id.username_input)
         nameInput = findViewById(R.id.name_input)
@@ -53,15 +48,9 @@ class SecondActivity : AppCompatActivity() {
         signupBtn = findViewById(R.id.sign_in_icon)
 
         dateInput.setOnClickListener {
-            val calendar = Calendar.getInstance()
-            val picker = DatePickerDialog(
-                this,
-                { _, y, m, d -> dateInput.setText("$d/${m + 1}/$y") },
-                calendar.get(Calendar.YEAR),
-                calendar.get(Calendar.MONTH),
-                calendar.get(Calendar.DAY_OF_MONTH)
-            )
-            picker.show()
+            val c = Calendar.getInstance()
+            DatePickerDialog(this, { _, y, m, d -> dateInput.setText("$d/${m + 1}/$y") },
+                c.get(Calendar.YEAR), c.get(Calendar.MONTH), c.get(Calendar.DAY_OF_MONTH)).show()
         }
 
         passwordToggle.setOnClickListener {
@@ -71,116 +60,107 @@ class SecondActivity : AppCompatActivity() {
                     android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
                 else
                     android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-            passwordToggle.setBackgroundResource(R.drawable.visibility)
             passwordInput.setSelection(passwordInput.text.length)
         }
 
         profileImg.setOnClickListener {
             val intent = Intent(Intent.ACTION_PICK)
             intent.type = "image/*"
-            startActivityForResult(intent, PICK_IMAGE_REQUEST)
+            startActivityForResult(intent, PICK_IMAGE)
         }
 
-        signupBtn.setOnClickListener {
-            val username = usernameInput.text.toString().trim()
-            val name = nameInput.text.toString().trim()
-            val lastname = lastnameInput.text.toString().trim()
-            val dob = dateInput.text.toString().trim()
-            val email = emailInput.text.toString().trim()
-            val password = passwordInput.text.toString().trim()
+        signupBtn.setOnClickListener { signupUser() }
+    }
 
-            if (username.isEmpty() || name.isEmpty() || lastname.isEmpty() ||
-                dob.isEmpty() || email.isEmpty() || password.isEmpty()
-            ) {
-                Toast.makeText(this, "Please fill all fields", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
+    private fun signupUser() {
+        val username = usernameInput.text.toString().trim()
+        val name = nameInput.text.toString().trim()
+        val lastname = lastnameInput.text.toString().trim()
+        val dob = dateInput.text.toString().trim()
+        val email = emailInput.text.toString().trim()
+        val password = passwordInput.text.toString().trim()
 
-            if (encodedImage.isEmpty()) {
-                val defaultBitmap = BitmapFactory.decodeResource(resources, R.drawable.profile_image)
-                encodedImage = encodeImage(defaultBitmap)
-            }
-
-            checkUsernameExists(username) { exists ->
-                if (exists) {
-                    Toast.makeText(this, "Username already taken", Toast.LENGTH_SHORT).show()
-                } else {
-                    registerUser(username, name, lastname, dob, email, password)
-                }
-            }
+        if (username.isEmpty() || name.isEmpty() || lastname.isEmpty() ||
+            dob.isEmpty() || email.isEmpty() || password.isEmpty()) {
+            Toast.makeText(this, "Please fill all fields", Toast.LENGTH_SHORT).show()
+            return
         }
-    }
 
-    private fun checkUsernameExists(username: String, callback: (Boolean) -> Unit) {
-        dbRef.orderByChild("username").equalTo(username)
-            .addListenerForSingleValueEvent(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    callback(snapshot.exists())
-                }
-                override fun onCancelled(error: DatabaseError) {
-                    callback(false)
-                }
-            })
-    }
+        if (encodedImage.isEmpty()) {
+            val bmp = BitmapFactory.decodeResource(resources, R.drawable.profile_image)
+            encodedImage = encodeImage(bmp)
+        }
 
-    private fun registerUser(username: String, name: String, lastname: String, dob: String, email: String, password: String) {
-        auth.createUserWithEmailAndPassword(email, password)
-            .addOnSuccessListener { result ->
-                val uid = result.user?.uid ?: return@addOnSuccessListener
+        val url = "http://192.168.100.10/instagram_api/signup.php"
+        val rq = Volley.newRequestQueue(this)
 
-                val newUser = mapOf(
-                    "uid" to uid,
-                    "username" to username,
-                    "name" to name,
-                    "lastname" to lastname,
-                    "dob" to dob,
-                    "email" to email,
-                    "followers" to mutableMapOf<String, Boolean>(),
-                    "following" to mutableMapOf<String, Boolean>(),
-                    "imageBase64" to encodedImage,
-                    "bio" to "",
-                    "posts" to mutableMapOf<String, Post >(),
-                    "stories" to mutableMapOf<String, Story>(),
-                    "followRequests" to mutableMapOf<String, Boolean>(),
-                    "chats" to mutableMapOf<String, Chat>(),
-                )
-
-                dbRef.child(uid).setValue(newUser)
-                    .addOnSuccessListener {
-                        Toast.makeText(this, "Account created successfully", Toast.LENGTH_SHORT).show()
+        val req = object : StringRequest(Method.POST, url,
+            { response ->
+                try {
+                    val obj = JSONObject(response.trim())
+                    val ok = when {
+                        obj.has("success") -> obj.optBoolean("success", false)
+                        obj.optString("status", "") == "success" -> true
+                        else -> false
+                    }
+                    if (ok) {
+                        val token = obj.optString("token", null)
+                        if (!token.isNullOrEmpty()) SessionManager(this).saveToken(token)
+                        Toast.makeText(this, "Account created!", Toast.LENGTH_SHORT).show()
+                        val prefs = getSharedPreferences("user", MODE_PRIVATE)
+                        prefs.edit().putString("token", obj.getString("token"))
+                            .putInt("user_id", obj.getInt("user_id"))
+                            .apply()
                         startActivity(Intent(this, ThirdActivity::class.java))
                         finish()
+                    } else {
+                        val msg = obj.optString("message", obj.optString("error", "Signup failed"))
+                        Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
                     }
-                    .addOnFailureListener {
-                        Toast.makeText(this, "Failed to save user data: ${it.message}", Toast.LENGTH_SHORT).show()
-                    }
+                } catch (e: Exception) {
+                    Toast.makeText(this, "Invalid server response", Toast.LENGTH_LONG).show()
+                }
+            },
+            { error ->
+                val code = error.networkResponse?.statusCode?.toString() ?: error.message
+                Toast.makeText(this, "Network Error: $code", Toast.LENGTH_LONG).show()
+            }) {
+
+            override fun getParams(): MutableMap<String, String> {
+                val map = HashMap<String, String>()
+                map["username"] = username
+                map["name"] = name
+                map["lastname"] = lastname
+                map["dob"] = dob
+                map["email"] = email
+                map["password"] = password
+                map["imageBase64"] = encodedImage
+                return map
             }
-            .addOnFailureListener {
-                Toast.makeText(this, "Sign up failed: ${it.message}", Toast.LENGTH_SHORT).show()
-                Log.e("FirebaseSignUp", "Error: ${it.message}")
-            }
+        }
+
+        req.retryPolicy = DefaultRetryPolicy(15000, DefaultRetryPolicy.DEFAULT_MAX_RETRIES, DefaultRetryPolicy.DEFAULT_BACKOFF_MULT)
+        rq.add(req)
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == PICK_IMAGE_REQUEST && resultCode == RESULT_OK && data != null) {
+        if (requestCode == PICK_IMAGE && resultCode == RESULT_OK && data != null) {
             selectedImageUri = data.data
             try {
-                val inputStream: InputStream? = contentResolver.openInputStream(selectedImageUri!!)
-                val bitmap = BitmapFactory.decodeStream(inputStream)
-                profileImg.setImageBitmap(bitmap)
-                encodedImage = encodeImage(bitmap)
+                val stream: InputStream? = contentResolver.openInputStream(selectedImageUri!!)
+                val bmp = android.graphics.BitmapFactory.decodeStream(stream)
+                profileImg.setImageBitmap(bmp)
+                encodedImage = encodeImage(bmp)
             } catch (e: Exception) {
                 Toast.makeText(this, "Failed to load image", Toast.LENGTH_SHORT).show()
-                Log.e("ImagePicker", "Error: ${e.message}")
             }
         }
     }
 
-    private fun encodeImage(bitmap: Bitmap): String {
-        val baos = ByteArrayOutputStream()
-        bitmap.compress(Bitmap.CompressFormat.JPEG, 70, baos)
-        val bytes = baos.toByteArray()
-        return Base64.encodeToString(bytes, Base64.DEFAULT)
+    private fun encodeImage(bmp: android.graphics.Bitmap): String {
+        val out = ByteArrayOutputStream()
+        bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 60, out)
+        return Base64.encodeToString(out.toByteArray(), Base64.DEFAULT)
     }
 }
