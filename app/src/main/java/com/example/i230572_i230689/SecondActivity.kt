@@ -37,6 +37,7 @@ class SecondActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.sign_up)
 
+
         usernameInput = findViewById(R.id.username_input)
         nameInput = findViewById(R.id.name_input)
         lastnameInput = findViewById(R.id.lastname_input)
@@ -47,10 +48,13 @@ class SecondActivity : AppCompatActivity() {
         passwordToggle = findViewById(R.id.password_toggle)
         signupBtn = findViewById(R.id.sign_in_icon)
 
+
         dateInput.setOnClickListener {
             val c = Calendar.getInstance()
-            DatePickerDialog(this, { _, y, m, d -> dateInput.setText("$d/${m + 1}/$y") },
-                c.get(Calendar.YEAR), c.get(Calendar.MONTH), c.get(Calendar.DAY_OF_MONTH)).show()
+            DatePickerDialog(this,
+                { _, y, m, d -> dateInput.setText("$d/${m + 1}/$y") },
+                c.get(Calendar.YEAR), c.get(Calendar.MONTH), c.get(Calendar.DAY_OF_MONTH)
+            ).show()
         }
 
         passwordToggle.setOnClickListener {
@@ -81,7 +85,8 @@ class SecondActivity : AppCompatActivity() {
         val password = passwordInput.text.toString().trim()
 
         if (username.isEmpty() || name.isEmpty() || lastname.isEmpty() ||
-            dob.isEmpty() || email.isEmpty() || password.isEmpty()) {
+            dob.isEmpty() || email.isEmpty() || password.isEmpty()
+        ) {
             Toast.makeText(this, "Please fill all fields", Toast.LENGTH_SHORT).show()
             return
         }
@@ -98,19 +103,19 @@ class SecondActivity : AppCompatActivity() {
             { response ->
                 try {
                     val obj = JSONObject(response.trim())
-                    val ok = when {
-                        obj.has("success") -> obj.optBoolean("success", false)
-                        obj.optString("status", "") == "success" -> true
-                        else -> false
-                    }
+                    val ok = obj.optBoolean("success", false) || obj.optString("status", "") == "success"
                     if (ok) {
-                        val token = obj.optString("token", null)
-                        if (!token.isNullOrEmpty()) SessionManager(this).saveToken(token)
+                        val token = obj.optString("token", "")
+                        if (token.isNotEmpty()) {
+                            val sm = SessionManager(this)
+                            sm.saveSession(
+                                token,
+                                obj.optInt("user_id", 0),
+                                "$username"
+                            )
+                        }
+
                         Toast.makeText(this, "Account created!", Toast.LENGTH_SHORT).show()
-                        val prefs = getSharedPreferences("user", MODE_PRIVATE)
-                        prefs.edit().putString("token", obj.getString("token"))
-                            .putInt("user_id", obj.getInt("user_id"))
-                            .apply()
                         startActivity(Intent(this, ThirdActivity::class.java))
                         finish()
                     } else {
@@ -119,11 +124,13 @@ class SecondActivity : AppCompatActivity() {
                     }
                 } catch (e: Exception) {
                     Toast.makeText(this, "Invalid server response", Toast.LENGTH_LONG).show()
+                    e.printStackTrace()
                 }
             },
             { error ->
-                val code = error.networkResponse?.statusCode?.toString() ?: error.message
-                Toast.makeText(this, "Network Error: $code", Toast.LENGTH_LONG).show()
+                val code = error.networkResponse?.statusCode?.toString() ?: "No status code"
+                val body = error.networkResponse?.data?.let { String(it) } ?: ""
+                Toast.makeText(this, "Network Error: $code\n$body", Toast.LENGTH_LONG).show()
             }) {
 
             override fun getParams(): MutableMap<String, String> {
@@ -139,7 +146,11 @@ class SecondActivity : AppCompatActivity() {
             }
         }
 
-        req.retryPolicy = DefaultRetryPolicy(15000, DefaultRetryPolicy.DEFAULT_MAX_RETRIES, DefaultRetryPolicy.DEFAULT_BACKOFF_MULT)
+        req.retryPolicy = DefaultRetryPolicy(
+            15000,
+            DefaultRetryPolicy.DEFAULT_MAX_RETRIES,
+            DefaultRetryPolicy.DEFAULT_BACKOFF_MULT
+        )
         rq.add(req)
     }
 
@@ -149,7 +160,7 @@ class SecondActivity : AppCompatActivity() {
             selectedImageUri = data.data
             try {
                 val stream: InputStream? = contentResolver.openInputStream(selectedImageUri!!)
-                val bmp = android.graphics.BitmapFactory.decodeStream(stream)
+                val bmp = BitmapFactory.decodeStream(stream)
                 profileImg.setImageBitmap(bmp)
                 encodedImage = encodeImage(bmp)
             } catch (e: Exception) {
