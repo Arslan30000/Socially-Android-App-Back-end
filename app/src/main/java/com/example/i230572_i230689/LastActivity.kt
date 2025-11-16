@@ -1,6 +1,9 @@
 package com.example.i230572_i230689
 
 import android.content.Intent
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.IntentFilter
 import android.graphics.BitmapFactory
 import android.os.Bundle
 import android.util.Base64
@@ -17,6 +20,7 @@ import org.json.JSONObject
 class LastActivity : AppCompatActivity() {
 
     private lateinit var sessionManager: SessionManager
+    private var profileReceiver: BroadcastReceiver? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -24,9 +28,40 @@ class LastActivity : AppCompatActivity() {
 
         sessionManager = SessionManager(this)
 
-        if (sessionManager.isLoggedIn()) {
-            loadUserData()
+        // If caller provided updated user/counts (after profile edit), apply immediately
+        intent.getStringExtra("user_json")?.let { uj ->
+            try {
+                val userObj = org.json.JSONObject(uj)
+                val username = userObj.optString("username", "Unknown")
+                val bio = userObj.optString("bio", "No bio yet")
+                findViewById<TextView>(R.id.name).text = username
+                findViewById<TextView>(R.id.title_text).text = username
+                findViewById<TextView>(R.id.description).text = bio
+                val imageBase64 = userObj.optString("imageBase64", "")
+                if (imageBase64.isNotEmpty()) {
+                    try {
+                        val bytes = android.util.Base64.decode(imageBase64, android.util.Base64.DEFAULT)
+                        val bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                        findViewById<ImageView>(R.id.profile_main).setImageBitmap(bmp)
+                        findViewById<ImageView>(R.id.profile_icon).setImageBitmap(bmp)
+                    } catch (_: Exception) {}
+                }
+            } catch (_: Exception) {}
         }
+
+        intent.getStringExtra("counts_json")?.let { cj ->
+            try {
+                val countsObj = org.json.JSONObject(cj)
+                val followers = countsObj.optInt("followers", 0)
+                val following = countsObj.optInt("following", 0)
+                val posts = countsObj.optInt("posts", 0)
+                findViewById<TextView>(R.id.no_2).text = followers.toString()
+                findViewById<TextView>(R.id.no_3).text = following.toString()
+                findViewById<TextView>(R.id.no_1).text = posts.toString()
+            } catch (_: Exception) {}
+        }
+
+        if (sessionManager.isLoggedIn()) loadUserData()
 
         findViewById<ImageView>(R.id.search_icon).setOnClickListener {
             startActivity(Intent(this, SixthActivity::class.java))
@@ -72,10 +107,38 @@ class LastActivity : AppCompatActivity() {
         if (sessionManager.isLoggedIn()) loadUserData()
     }
 
+    override fun onStart() {
+        super.onStart()
+        // register receiver to refresh profile only when:
+        // 1. profile is updated (profile_updated)
+        // 2. user unfollows someone (user_unfollowed)
+        // 3. follow request is accepted by someone (follow_request_accepted)
+        try {
+            val filter = IntentFilter()
+            filter.addAction("profile_updated")
+            filter.addAction("user_unfollowed")
+            filter.addAction("follow_request_accepted")
+            profileReceiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context?, intent: Intent?) {
+                    if (sessionManager.isLoggedIn()) loadUserData()
+                }
+            }
+            registerReceiver(profileReceiver, filter)
+        } catch (_: Exception) {}
+    }
+
+    override fun onStop() {
+        super.onStop()
+        try {
+            profileReceiver?.let { unregisterReceiver(it) }
+        } catch (_: Exception) {}
+        profileReceiver = null
+    }
+
     private fun loadUserData() {
         val token = sessionManager.getToken() ?: return
         val userId = sessionManager.getUserId()
-        val url = "https://nonactinically-unkindhearted-shelli.ngrok-free.dev/instagram_api/get_profile.php?user_id=$userId"
+        val url = BuildConfig.BASE_URL + "get_profile.php?user_id=$userId"
         val rq = Volley.newRequestQueue(this)
 
         val req = object : StringRequest(Method.GET, url,

@@ -51,7 +51,7 @@ class ThirdActivity : AppCompatActivity() {
     }
 
     private fun loadUserImage(token: String) {
-        val url = "https://nonactinically-unkindhearted-shelli.ngrok-free.dev/instagram_api/get_user.php"
+        val url = BuildConfig.BASE_URL + "get_user.php"
         val rq = Volley.newRequestQueue(this)
 
         val req = object : StringRequest(Method.POST, url,

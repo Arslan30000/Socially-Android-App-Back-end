@@ -76,7 +76,7 @@ class UserListAdapter(private val users: MutableList<User>, private val listType
         val sessionManager = SessionManager(context)
         val token = sessionManager.getToken() ?: return
 
-        val url = "https://nonactinically-unkindhearted-shelli.ngrok-free.dev/instagram_api/unfollow_user.php"
+        val url = BuildConfig.BASE_URL + "unfollow_user.php"
         val rq = Volley.newRequestQueue(context)
 
         val req = object : StringRequest(Method.POST, url,

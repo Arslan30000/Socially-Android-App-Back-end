@@ -114,6 +114,10 @@
             android:exported="true">
         </activity>
         <activity
+            android:name=".CommentsActivity"
+            android:exported="true">
+        </activity>
+        <activity
             android:name=".TwentyOneActivity"
             android:exported="true">
         </activity>

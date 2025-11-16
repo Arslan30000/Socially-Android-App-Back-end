@@ -12,10 +12,11 @@ import android.widget.EditText
 import android.widget.ImageView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.FirebaseDatabase
+import com.android.volley.DefaultRetryPolicy
+import com.android.volley.toolbox.StringRequest
+import com.android.volley.toolbox.Volley
+import java.util.HashMap
 import java.io.ByteArrayOutputStream
-import java.util.UUID
 
 class AddPostActivity : AppCompatActivity() {
 
@@ -72,12 +73,12 @@ class AddPostActivity : AppCompatActivity() {
             return
         }
 
-        val firebaseUser = FirebaseAuth.getInstance().currentUser
-        if (firebaseUser == null) {
+        val sessionManager = SessionManager(this)
+        val token = sessionManager.getToken()
+        if (token == null) {
             Toast.makeText(this, "Authentication failed. Please log in again.", Toast.LENGTH_LONG).show()
             return
         }
-        val userId = firebaseUser.uid
 
         val bitmap = MediaStore.Images.Media.getBitmap(contentResolver, imageUri)
         val byteArrayOutputStream = ByteArrayOutputStream()
@@ -85,24 +86,42 @@ class AddPostActivity : AppCompatActivity() {
         val imageBytes = byteArrayOutputStream.toByteArray()
         val imageBase64 = android.util.Base64.encodeToString(imageBytes, android.util.Base64.DEFAULT)
 
-        val postId = UUID.randomUUID().toString()
-        val post = Post(
-            postId,
-            userId,
-            imageBase64,
-            caption,
-            System.currentTimeMillis()
-        )
+            val url = BuildConfig.BASE_URL + "upload_post.php"
+        val rq = Volley.newRequestQueue(this)
 
-        FirebaseDatabase.getInstance().getReference("posts").child(postId).setValue(post)
-            .addOnSuccessListener {
-                Toast.makeText(this, "Post uploaded successfully", Toast.LENGTH_SHORT).show()
-                finish()
+        val req = object : StringRequest(Method.POST, url,
+            { response ->
+                try {
+                    // try parse minimal response
+                    Toast.makeText(this, "Post uploaded successfully", Toast.LENGTH_SHORT).show()
+                    finish()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Upload parse error", e)
+                    Toast.makeText(this, "Invalid server response", Toast.LENGTH_SHORT).show()
+                }
+            },
+            { error ->
+                Log.e(TAG, "Network error: ${error.message}")
+                Toast.makeText(this, "Network error: ${error.message}", Toast.LENGTH_LONG).show()
+            }) {
+
+            override fun getParams(): MutableMap<String, String> {
+                val map = HashMap<String, String>()
+                map["postImage"] = imageBase64
+                map["caption"] = caption
+                map["timestamp"] = System.currentTimeMillis().toString()
+                return map
             }
-            .addOnFailureListener { exception ->
-                // Log the detailed error message from Firebase
-                Log.e(TAG, "Firebase upload failed", exception)
-                Toast.makeText(this, "Upload failed: ${exception.message}", Toast.LENGTH_LONG).show()
+
+            override fun getHeaders(): MutableMap<String, String> {
+                val headers = HashMap<String, String>()
+                headers["Authorization"] = "Bearer $token"
+                headers["Content-Type"] = "application/x-www-form-urlencoded"
+                return headers
             }
+        }
+
+        req.retryPolicy = DefaultRetryPolicy(30000, DefaultRetryPolicy.DEFAULT_MAX_RETRIES, DefaultRetryPolicy.DEFAULT_BACKOFF_MULT)
+        rq.add(req)
     }
 }

@@ -17,6 +17,11 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "BASE_URL", "\"http://192.168.100.10/instagram_api/\"")
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     buildTypes {

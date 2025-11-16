@@ -55,7 +55,7 @@ class TwelfthActivity : AppCompatActivity() {
 
     private fun loadFollowRequests() {
         val token = sessionManager.getToken() ?: return
-        val url = "https://nonactinically-unkindhearted-shelli.ngrok-free.dev/instagram_api/get_follow_requests.php"
+        val url = BuildConfig.BASE_URL + "get_follow_requests.php"
         val rq = Volley.newRequestQueue(this)
 
         val req = object : StringRequest(Method.GET, url,
@@ -96,7 +96,7 @@ class TwelfthActivity : AppCompatActivity() {
 
     private fun acceptFollowRequest(request: FollowRequest) {
         val token = sessionManager.getToken() ?: return
-        val url = "https://nonactinically-unkindhearted-shelli.ngrok-free.dev/instagram_api/accept_follow_request.php"
+        val url = BuildConfig.BASE_URL + "accept_follow_request.php"
         val rq = Volley.newRequestQueue(this)
 
         val req = object : StringRequest(Method.POST, url,
@@ -106,6 +106,10 @@ class TwelfthActivity : AppCompatActivity() {
                     if (obj.optBoolean("success", false)) {
                         requestsList.remove(request)
                         adapter.notifyDataSetChanged()
+                        // broadcast that follow request was accepted so profile can refresh following count
+                        try {
+                            sendBroadcast(Intent("follow_request_accepted"))
+                        } catch (_: Exception) {}
                     }
                 } catch (e: Exception) {
                     e.printStackTrace()

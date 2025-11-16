@@ -78,6 +78,7 @@ class FifthActivity : AppCompatActivity() {
         if (sessionManager.isLoggedIn()) {
             fetchStoriesForFeed()
             fetchPostFeed()
+            fetchCurrentUserProfileForNav()
         } else {
             Log.d("FifthActivity", "User is not logged in on resume. Redirecting to login.")
             val intent = Intent(this, MainActivity::class.java)
@@ -100,7 +101,7 @@ class FifthActivity : AppCompatActivity() {
     }
     private fun fetchStoriesForFeed() {
         val token = sessionManager.getToken() ?: return
-        val url = "https://nonactinically-unkindhearted-shelli.ngrok-free.dev/instagram_api/get_stories.php"
+        val url = BuildConfig.BASE_URL + "get_stories.php"
         val rq = Volley.newRequestQueue(this)
 
         val req = object : StringRequest(Method.GET, url,
@@ -121,7 +122,8 @@ class FifthActivity : AppCompatActivity() {
                                 userProfilePicture = yourStoryObj.optString("userProfilePicture", ""),
                                 storyImage = "",
                                 timestamp = 0L,
-                                isAddButton = true
+                                isAddButton = true,
+                                hasStories = yourStoryObj.optBoolean("hasStories", false)
                             ))
                         }
 
@@ -164,7 +166,7 @@ class FifthActivity : AppCompatActivity() {
     }
     private fun fetchPostFeed() {
         val token = sessionManager.getToken() ?: return
-        val url = "https://nonactinically-unkindhearted-shelli.ngrok-free.dev/instagram_api/get_feed.php"
+        val url = BuildConfig.BASE_URL + "get_feed.php"
         val rq = Volley.newRequestQueue(this)
 
         val req = object : StringRequest(Method.GET, url,
@@ -186,8 +188,9 @@ class FifthActivity : AppCompatActivity() {
                                     timestamp = postObj.optLong("timestamp", 0L),
                                     username = postObj.optString("username", "User"),
                                     userProfileImage = postObj.optString("userProfileImage", ""),
-                                    likesCount = 0,
-                                    commentsCount = 0
+                                    likesCount = postObj.optInt("likesCount", 0),
+                                    commentsCount = postObj.optInt("commentsCount", 0),
+                                    isLiked = postObj.optBoolean("isLiked", false)
                                 ))
                             }
                         }
@@ -232,7 +235,7 @@ class FifthActivity : AppCompatActivity() {
         bitmap.compress(Bitmap.CompressFormat.JPEG, 50, baos)
         val bitmapString = Base64.encodeToString(baos.toByteArray(), Base64.DEFAULT)
 
-        val url = "https://nonactinically-unkindhearted-shelli.ngrok-free.dev/instagram_api/upload_story.php"
+        val url = BuildConfig.BASE_URL + "upload_story.php"
         val rq = Volley.newRequestQueue(this)
 
         val req = object : StringRequest(Method.POST, url,
@@ -276,7 +279,8 @@ class FifthActivity : AppCompatActivity() {
         findViewById<ImageView>(R.id.search_icon).setOnClickListener {
             startActivity(Intent(this, SixthActivity::class.java))
         }
-        findViewById<CircleImageView>(R.id.profile_icon).setOnClickListener {
+        val profileIcon = findViewById<CircleImageView>(R.id.profile_icon)
+        profileIcon.setOnClickListener {
             startActivity(Intent(this, LastActivity::class.java))
         }
         findViewById<ImageView>(R.id.share).setOnClickListener {
@@ -291,5 +295,48 @@ class FifthActivity : AppCompatActivity() {
             intent.putExtra("USER_ID", sessionManager.getUserId())
             startActivity(intent)
         }
+    }
+
+    private fun fetchCurrentUserProfileForNav() {
+        val token = sessionManager.getToken() ?: return
+        val url = BuildConfig.BASE_URL + "get_profile.php"
+        val rq = Volley.newRequestQueue(this)
+
+        val req = object : StringRequest(Method.GET, url,
+            { response ->
+                try {
+                    val obj = JSONObject(response.trim())
+                    if (obj.optBoolean("success", false)) {
+                        val userObj = obj.optJSONObject("user")
+                        val imageBase64 = userObj?.optString("imageBase64", "") ?: ""
+                        val profileIcon = findViewById<CircleImageView>(R.id.profile_icon)
+                        if (!imageBase64.isNullOrEmpty()) {
+                            try {
+                                val bytes = Base64.decode(imageBase64, Base64.DEFAULT)
+                                val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                                profileIcon.setImageBitmap(bmp)
+                            } catch (e: Exception) {
+                                profileIcon.setImageResource(R.drawable.profile_image)
+                            }
+                        } else {
+                            profileIcon.setImageResource(R.drawable.profile_image)
+                        }
+                    }
+                } catch (e: Exception) {
+                    // ignore
+                }
+            },
+            { error ->
+                // ignore
+            }) {
+            override fun getHeaders(): MutableMap<String, String> {
+                val headers = HashMap<String, String>()
+                headers["Authorization"] = "Bearer $token"
+                return headers
+            }
+        }
+
+        req.retryPolicy = DefaultRetryPolicy(10000, DefaultRetryPolicy.DEFAULT_MAX_RETRIES, DefaultRetryPolicy.DEFAULT_BACKOFF_MULT)
+        rq.add(req)
     }
 }

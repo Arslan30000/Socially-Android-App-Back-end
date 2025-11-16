@@ -40,9 +40,9 @@ class FollowersListActivity : AppCompatActivity() {
         val token = sessionManager.getToken() ?: return
         val userId = intent.getStringExtra("userId")
         val url = if (listType == "followers") {
-            "https://nonactinically-unkindhearted-shelli.ngrok-free.dev/instagram_api/get_followers.php?user_id=${userId ?: ""}"
+            BuildConfig.BASE_URL + "get_followers.php?user_id=${userId ?: ""}"
         } else {
-            "https://nonactinically-unkindhearted-shelli.ngrok-free.dev/instagram_api/get_following_list.php?user_id=${userId ?: ""}"
+            BuildConfig.BASE_URL + "get_following_list.php?user_id=${userId ?: ""}"
         }
 
         val rq = Volley.newRequestQueue(this)

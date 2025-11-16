@@ -9,6 +9,10 @@ class EleventhActivity: AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.recent_activity)
+        
+        val sessionManager = SessionManager(this)
+        val currentUserId = sessionManager.getUserId()
+        
         val homebtn: ImageView = findViewById(R.id.home_icon)
         homebtn.setOnClickListener {
             val intent = Intent(this, FifthActivity::class.java)
@@ -42,13 +46,17 @@ class EleventhActivity: AppCompatActivity() {
         }
         val P_1: de.hdodenhof.circleimageview.CircleImageView = findViewById(R.id.p_1)
         P_1.setOnClickListener {
-            val intent = Intent(this, SeventeenActivity::class.java)
+            val intent = Intent(this, NineteenActivity::class.java).apply {
+                putExtra("USER_ID", currentUserId)
+            }
             startActivity(intent)
 
         }
         val P_2: de.hdodenhof.circleimageview.CircleImageView = findViewById(R.id.p_2)
         P_2.setOnClickListener {
-            val intent = Intent(this, SeventeenActivity::class.java)
+            val intent = Intent(this, NineteenActivity::class.java).apply {
+                putExtra("USER_ID", currentUserId)
+            }
             startActivity(intent)
 
         }

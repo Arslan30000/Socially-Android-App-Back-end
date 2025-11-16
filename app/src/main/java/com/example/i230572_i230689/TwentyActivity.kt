@@ -74,7 +74,7 @@ class TwentyActivity : AppCompatActivity() {
 
     private fun loadUserProfile() {
         val token = sessionManager.getToken() ?: return
-        val url = "https://nonactinically-unkindhearted-shelli.ngrok-free.dev/instagram_api/get_profile.php?user_id=$targetUserId"
+        val url = BuildConfig.BASE_URL + "get_profile.php?user_id=$targetUserId"
         val rq = Volley.newRequestQueue(this)
 
         val req = object : StringRequest(Method.GET, url,
@@ -142,7 +142,7 @@ class TwentyActivity : AppCompatActivity() {
 
     private fun sendFollowRequest() {
         val token = sessionManager.getToken() ?: return
-        val url = "https://nonactinically-unkindhearted-shelli.ngrok-free.dev/instagram_api/send_follow_request.php"
+        val url = BuildConfig.BASE_URL + "send_follow_request.php"
         val rq = Volley.newRequestQueue(this)
 
         val req = object : StringRequest(Method.POST, url,

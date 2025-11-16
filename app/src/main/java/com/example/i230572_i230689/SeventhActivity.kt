@@ -6,6 +6,7 @@ import android.util.Base64
 import android.widget.*
 import android.os.Bundle
 import android.widget.LinearLayout.LayoutParams
+import android.content.Intent
 import androidx.appcompat.app.AppCompatActivity
 import com.android.volley.DefaultRetryPolicy
 import com.android.volley.toolbox.StringRequest
@@ -46,10 +47,8 @@ class SeventhActivity : AppCompatActivity() {
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 if (tabAccounts.currentTextColor == getColor(R.color.black)) {
                     val query = s.toString().trim()
-                    if (query.isNotEmpty()) {
-                        // Use exact-match lookup to avoid duplicate/infinite results
-                        searchUserExact(query)
-                    } else resultsLayout.removeAllViews()
+                    if (query.isNotEmpty()) searchUser(query)
+                    else resultsLayout.removeAllViews()
                 }
             }
             override fun afterTextChanged(s: android.text.Editable?) {}
@@ -77,10 +76,11 @@ class SeventhActivity : AppCompatActivity() {
         }
     }
 
-    private fun searchUserExact(query: String) {
+    private fun searchUser(query: String) {
         resultsLayout.removeAllViews()
         val token = sessionManager.getToken() ?: run { Toast.makeText(this, "Not logged in", Toast.LENGTH_SHORT).show(); return }
-        val url = "https://nonactinically-unkindhearted-shelli.ngrok-free.dev/instagram_api/get_user_by_username.php?username=${java.net.URLEncoder.encode(query, "utf-8")}" 
+
+        val url = BuildConfig.BASE_URL + "search_users.php?q=${java.net.URLEncoder.encode(query, "UTF-8") }"
         val rq = Volley.newRequestQueue(this)
 
         val req = object : StringRequest(Method.GET, url,
@@ -88,22 +88,28 @@ class SeventhActivity : AppCompatActivity() {
                 try {
                     val obj = JSONObject(response.trim())
                     if (obj.optBoolean("success", false)) {
-                        val userObj = obj.getJSONObject("user")
-                        val uid = userObj.optInt("id").toString()
-                        val username = userObj.optString("username")
-                        val imageBase64 = userObj.optString("imageBase64", "")
-                        val alreadyRequested = obj.optJSONObject("relationship")?.optBoolean("has_requested", false) ?: false
-                        addUserResult(username, imageBase64, uid, alreadyRequested)
+                        val users = obj.optJSONArray("users")
+                        resultsLayout.removeAllViews()
+                        if (users != null && users.length() > 0) {
+                            // show only first result
+                            val u = users.getJSONObject(0)
+                            val uname = u.optString("username", "")
+                            val img = u.optString("imageBase64", "")
+                            val uid = u.optInt("id", -1)
+                            val alreadyRequested = u.optBoolean("already_requested", false)
+                            val isFollowing = u.optBoolean("is_following", false)
+                            if (uid != -1) addUserResult(uname, img, uid, alreadyRequested, isFollowing)
+                        }
                     } else {
-                        // no result - keep layout empty
+                        resultsLayout.removeAllViews()
+                        val msg = obj.optString("message", "No users found")
+                        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
                     }
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
             },
-            { error ->
-                error.printStackTrace()
-            }) {
+            { error -> error.printStackTrace() }) {
             override fun getHeaders(): MutableMap<String, String> {
                 val headers = HashMap<String, String>()
                 headers["Authorization"] = "Bearer ${sessionManager.getToken()}"
@@ -115,7 +121,7 @@ class SeventhActivity : AppCompatActivity() {
         rq.add(req)
     }
 
-    private fun addUserResult(username: String, imageBase64: String?, targetUid: String, alreadyRequested: Boolean) {
+    private fun addUserResult(username: String, imageBase64: String?, targetUid: Int, alreadyRequested: Boolean, isFollowing: Boolean) {
         val row = LinearLayout(this)
         row.orientation = LinearLayout.HORIZONTAL
         row.setPadding(20, 20, 20, 20)
@@ -142,23 +148,29 @@ class SeventhActivity : AppCompatActivity() {
         followBtn.textSize = 14f
         followBtn.setPadding(20, 10, 20, 10)
 
-        if (alreadyRequested) {
-            followBtn.text = "Requested"
-            followBtn.isEnabled = false
-            followBtn.setBackgroundColor(getColor(R.color.light_grey))
-            followBtn.setTextColor(Color.BLACK)
-        } else {
-            followBtn.text = "Follow"
-            followBtn.setBackgroundColor(getColor(R.color.brown))
-            followBtn.setTextColor(Color.WHITE)
-            followBtn.setOnClickListener {
-                sendFollowRequest(targetUid) { success ->
-                    if (success) {
-                        followBtn.text = "Requested"
-                        followBtn.isEnabled = false
-                        followBtn.setBackgroundColor(getColor(R.color.light_grey))
-                        followBtn.setTextColor(Color.BLACK)
-                    }
+        when {
+            isFollowing -> {
+                followBtn.text = "Already Following"
+                followBtn.isEnabled = false
+                followBtn.setBackgroundColor(getColor(R.color.light_grey))
+                followBtn.setTextColor(Color.BLACK)
+            }
+            alreadyRequested -> {
+                followBtn.text = "Requested"
+                followBtn.isEnabled = false
+                followBtn.setBackgroundColor(getColor(R.color.light_grey))
+                followBtn.setTextColor(Color.BLACK)
+            }
+            else -> {
+                followBtn.text = "Follow"
+                followBtn.setBackgroundColor(getColor(R.color.brown))
+                followBtn.setTextColor(Color.WHITE)
+                followBtn.setOnClickListener {
+                    sendFollowRequest(targetUid)
+                    followBtn.text = "Requested"
+                    followBtn.isEnabled = false
+                    followBtn.setBackgroundColor(getColor(R.color.light_grey))
+                    followBtn.setTextColor(Color.BLACK)
                 }
             }
         }
@@ -166,12 +178,18 @@ class SeventhActivity : AppCompatActivity() {
         row.addView(imgView)
         row.addView(textView)
         row.addView(followBtn)
+        // clicking row opens profile view
+        row.setOnClickListener {
+            val intent = Intent(this, TwentyActivity::class.java)
+            intent.putExtra("userId", targetUid.toString())
+            startActivity(intent)
+        }
         resultsLayout.addView(row)
     }
 
-    private fun sendFollowRequest(targetUid: String, callback: ((Boolean) -> Unit)? = null) {
-        val token = sessionManager.getToken() ?: return
-        val url = "https://nonactinically-unkindhearted-shelli.ngrok-free.dev/instagram_api/send_follow_request.php"
+    private fun sendFollowRequest(targetUid: Int) {
+        val token = sessionManager.getToken() ?: run { Toast.makeText(this, "Not logged in", Toast.LENGTH_SHORT).show(); return }
+        val url = BuildConfig.BASE_URL + "send_follow_request.php"
         val rq = Volley.newRequestQueue(this)
 
         val req = object : StringRequest(Method.POST, url,
@@ -179,27 +197,18 @@ class SeventhActivity : AppCompatActivity() {
                 try {
                     val obj = JSONObject(response.trim())
                     if (obj.optBoolean("success", false)) {
-                        Toast.makeText(this, "Follow request sent", Toast.LENGTH_SHORT).show()
-                        callback?.invoke(true)
+                        // success - just silent update, button already changed
                     } else {
-                        Toast.makeText(this, obj.optString("message", "Request failed"), Toast.LENGTH_SHORT).show()
-                        callback?.invoke(false)
+                        Toast.makeText(this, obj.optString("message", "Failed to send request"), Toast.LENGTH_SHORT).show()
                     }
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                    callback?.invoke(false)
-                }
+                } catch (e: Exception) { e.printStackTrace() }
             },
-            { error ->
-                error.printStackTrace()
-                callback?.invoke(false)
-            }) {
+            { error -> error.printStackTrace() }) {
             override fun getParams(): MutableMap<String, String> {
-                val map = HashMap<String, String>()
-                map["to_user_id"] = targetUid
-                return map
+                val p = HashMap<String, String>()
+                p["to_user_id"] = targetUid.toString()
+                return p
             }
-
             override fun getHeaders(): MutableMap<String, String> {
                 val headers = HashMap<String, String>()
                 headers["Authorization"] = "Bearer $token"
@@ -207,7 +216,7 @@ class SeventhActivity : AppCompatActivity() {
             }
         }
 
-        req.retryPolicy = DefaultRetryPolicy(15000, DefaultRetryPolicy.DEFAULT_MAX_RETRIES, DefaultRetryPolicy.DEFAULT_BACKOFF_MULT)
+       req.retryPolicy = DefaultRetryPolicy(15000, DefaultRetryPolicy.DEFAULT_MAX_RETRIES, DefaultRetryPolicy.DEFAULT_BACKOFF_MULT)
         rq.add(req)
     }
 }

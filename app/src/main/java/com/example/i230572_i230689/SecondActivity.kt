@@ -96,7 +96,7 @@ class SecondActivity : AppCompatActivity() {
             encodedImage = encodeImage(bmp)
         }
 
-        val url = "https://nonactinically-unkindhearted-shelli.ngrok-free.dev/instagram_api/signup.php"
+        val url = BuildConfig.BASE_URL + "signup.php"
         val rq = Volley.newRequestQueue(this)
 
         val req = object : StringRequest(Method.POST, url,

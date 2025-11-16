@@ -86,6 +86,16 @@
         android:textStyle="bold" />
 
     <TextView
+        android:id="@+id/post_comments_count"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:text="0 comments"
+        android:textColor="@android:color/darker_gray"
+        android:layout_marginTop="4dp"
+        />
+
+    <TextView
         android:id="@+id/post_caption"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

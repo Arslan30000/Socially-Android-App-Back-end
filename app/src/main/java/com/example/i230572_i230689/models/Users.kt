@@ -13,6 +13,9 @@ data class Story(
     // The @Exclude annotation prevents this field from being saved to Firebase.
     @get:Exclude
     var isAddButton: Boolean = false
+,
+    @get:Exclude
+    var hasStories: Boolean = false
 ) {
     // Add a no-argument constructor, which is required by Firebase for deserialization.
     constructor() : this("", "", "", null, "", 0L, false)
@@ -36,6 +39,8 @@ data class Post(
     @get:Exclude
     var likesCount: Int = 0,
     @get:Exclude
+    var isLiked: Boolean = false,
+    @get:Exclude
     var commentsCount: Int = 0
 ) {
     // Required no-argument constructor for Firebase to work
@@ -58,6 +63,16 @@ data class Chat(
     var participants: Map<String, Boolean> = emptyMap(),
     var lastMessage: String = "",
     var lastMessageTime: Long = 0
+)
+
+data class Comment(
+    var id: String = "",
+    var postId: String = "",
+    var userId: String = "",
+    var username: String = "",
+    var userProfileImage: String = "",
+    var text: String = "",
+    var timestamp: String = ""
 )
 
 data class User(

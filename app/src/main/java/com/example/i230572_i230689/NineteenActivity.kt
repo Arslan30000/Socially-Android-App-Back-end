@@ -9,11 +9,11 @@ import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import com.google.firebase.database.DataSnapshot
-import com.google.firebase.database.DatabaseError
-import com.google.firebase.database.FirebaseDatabase
-import com.google.firebase.database.ValueEventListener
+import com.android.volley.DefaultRetryPolicy
+import com.android.volley.toolbox.StringRequest
+import com.android.volley.toolbox.Volley
 import de.hdodenhof.circleimageview.CircleImageView
+import org.json.JSONObject
 
 class NineteenActivity : AppCompatActivity() {
 
@@ -25,10 +25,13 @@ class NineteenActivity : AppCompatActivity() {
     // Data and State
     private val storiesList = mutableListOf<Story>()
     private var currentStoryIndex = 0
+    private lateinit var sessionManager: SessionManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.my_story)
+
+        sessionManager = SessionManager(this)
 
         // Initialize Views
         storyImageView = findViewById(R.id.main_image)
@@ -54,38 +57,61 @@ class NineteenActivity : AppCompatActivity() {
     }
 
     private fun fetchUserStories(userId: String) {
-        val storiesRef = FirebaseDatabase.getInstance().getReference("stories")
-        // Query to get all stories by this user, ordered by time
-        val query = storiesRef.orderByChild("userId").equalTo(userId)
+        val token = sessionManager.getToken() ?: run { Toast.makeText(this, "Not logged in", Toast.LENGTH_SHORT).show(); finish(); return }
+        val url = BuildConfig.BASE_URL + "get_stories.php?user_id=$userId"
+        val rq = Volley.newRequestQueue(this)
 
-        query.addListenerForSingleValueEvent(object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                if (snapshot.exists()) {
-                    storiesList.clear()
-                    // Populate the list with all stories from the user
-                    for (storySnapshot in snapshot.children) {
-                        storySnapshot.getValue(Story::class.java)?.let { storiesList.add(it) }
-                    }
+        val req = object : StringRequest(Method.GET, url,
+            { response ->
+                try {
+                    val obj = JSONObject(response.trim())
+                    if (obj.optBoolean("success", false)) {
+                        val storiesArray = obj.optJSONArray("stories")
+                        storiesList.clear()
+                        if (storiesArray != null) {
+                            for (i in 0 until storiesArray.length()) {
+                                val storyObj = storiesArray.getJSONObject(i)
+                                val story = Story(
+                                    userId = storyObj.optInt("userId", 0).toString(),
+                                    username = storyObj.optString("username", "Unknown"),
+                                    storyImage = storyObj.optString("storyImage", ""),
+                                    userProfilePicture = storyObj.optString("userProfilePicture", ""),
+                                    isAddButton = false
+                                )
+                                storiesList.add(story)
+                            }
+                        }
 
-                    if (storiesList.isNotEmpty()) {
-                        // Start by showing the first story
-                        currentStoryIndex = 0
-                        displayStory(currentStoryIndex)
+                        if (storiesList.isNotEmpty()) {
+                            currentStoryIndex = 0
+                            displayStory(currentStoryIndex)
+                        } else {
+                            Toast.makeText(this@NineteenActivity, "No stories found.", Toast.LENGTH_SHORT).show()
+                            finish()
+                        }
                     } else {
-                        Toast.makeText(this@NineteenActivity, "No stories found.", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@NineteenActivity, "No stories found for this user.", Toast.LENGTH_SHORT).show()
                         finish()
                     }
-                } else {
-                    Toast.makeText(this@NineteenActivity, "No stories found for this user.", Toast.LENGTH_SHORT).show()
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    Toast.makeText(this@NineteenActivity, "Error parsing stories", Toast.LENGTH_SHORT).show()
                     finish()
                 }
-            }
-
-            override fun onCancelled(error: DatabaseError) {
+            },
+            { error ->
                 Toast.makeText(this@NineteenActivity, "Failed to load stories.", Toast.LENGTH_SHORT).show()
                 finish()
+            }) {
+            override fun getHeaders(): MutableMap<String, String> {
+                val headers = HashMap<String, String>()
+                headers["Authorization"] = "Bearer $token"
+                return headers
             }
-        })
+        }
+
+        req.retryPolicy = DefaultRetryPolicy(15000, DefaultRetryPolicy.DEFAULT_MAX_RETRIES, DefaultRetryPolicy.DEFAULT_BACKOFF_MULT)
+        rq.add(req)
     }
 
     /**
@@ -97,7 +123,6 @@ class NineteenActivity : AppCompatActivity() {
         val story = storiesList[index]
 
         // Update the UI elements
-        // The username and profile picture only need to be set once, but this is safer
         usernameTextView.text = story.username
         decodeAndSetImage(story.userProfilePicture, userProfileImageView, R.drawable.profile_image)
         decodeAndSetImage(story.storyImage, storyImageView) // This is the main changing image
@@ -111,7 +136,6 @@ class NineteenActivity : AppCompatActivity() {
             currentStoryIndex--
             displayStory(currentStoryIndex)
         }
-        // If on the first story, tapping previous does nothing.
     }
 
     /**
@@ -119,11 +143,9 @@ class NineteenActivity : AppCompatActivity() {
      */
     private fun showNextStory() {
         if (currentStoryIndex < storiesList.size - 1) {
-            // If there are more stories, show the next one
             currentStoryIndex++
             displayStory(currentStoryIndex)
         } else {
-            // If it's the last story, close the activity
             finish()
         }
     }

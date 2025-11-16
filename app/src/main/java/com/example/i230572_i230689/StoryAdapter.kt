@@ -40,8 +40,8 @@ class StoryAdapter(
             // The plus icon ALWAYS opens the gallery to add a new story.
             holder.addStoryPlusIcon.setOnClickListener { onAddStoryClick() }
 
-            // Check if a userId is present. If so, it means the user has stories.
-            if (story.userId.isNotEmpty()) {
+            // If the current user has stories, clicking the main image opens the viewer.
+            if (story.hasStories) {
                 // The main image click should open the user's stories for viewing.
                 holder.userImage.setOnClickListener {
                     val intent = Intent(context, NineteenActivity::class.java).apply {

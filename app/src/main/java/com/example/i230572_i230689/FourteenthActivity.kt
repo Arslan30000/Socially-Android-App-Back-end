@@ -65,7 +65,7 @@ class FourteenthActivity : AppCompatActivity() {
     private fun loadUserData() {
         val token = sessionManager.getToken() ?: return
         val userId = sessionManager.getUserId()
-        val url = "https://nonactinically-unkindhearted-shelli.ngrok-free.dev/instagram_api/get_profile.php?user_id=$userId"
+        val url = BuildConfig.BASE_URL + "get_profile.php?user_id=$userId"
         val rq = Volley.newRequestQueue(this)
 
         val req = object : StringRequest(Method.GET, url,
@@ -129,7 +129,7 @@ class FourteenthActivity : AppCompatActivity() {
             return
         }
 
-        val url = "https://nonactinically-unkindhearted-shelli.ngrok-free.dev/instagram_api/update_profile.php"
+        val url = BuildConfig.BASE_URL + "update_profile.php"
         val rq = Volley.newRequestQueue(this)
 
         val req = object : StringRequest(Method.POST, url,
@@ -141,9 +141,26 @@ class FourteenthActivity : AppCompatActivity() {
                         try {
                             sessionManager.saveSession(token, userId, username)
                         } catch (_: Exception) {}
-                        Toast.makeText(this@FourteenthActivity, "Profile updated successfully", Toast.LENGTH_SHORT).show()
-                        startActivity(Intent(this@FourteenthActivity, LastActivity::class.java))
-                        finish()
+
+                        // parse returned user and counts and pass to LastActivity so profile UI updates immediately
+                        try {
+                            val returnedUser = obj.optJSONObject("user")
+                            val returnedCounts = obj.optJSONObject("counts")
+                            val intent = Intent(this@FourteenthActivity, LastActivity::class.java)
+                            if (returnedUser != null) intent.putExtra("user_json", returnedUser.toString())
+                            if (returnedCounts != null) intent.putExtra("counts_json", returnedCounts.toString())
+                            // also broadcast profile update for other parts of the app
+                            try { sendBroadcast(Intent("profile_updated")) } catch (_: Exception) {}
+                            Toast.makeText(this@FourteenthActivity, "Profile updated successfully", Toast.LENGTH_SHORT).show()
+                            startActivity(intent)
+                            finish()
+                        } catch (e: Exception) {
+                            // fallback
+                            try { sendBroadcast(Intent("profile_updated")) } catch (_: Exception) {}
+                            Toast.makeText(this@FourteenthActivity, "Profile updated successfully", Toast.LENGTH_SHORT).show()
+                            startActivity(Intent(this@FourteenthActivity, LastActivity::class.java))
+                            finish()
+                        }
                     } else {
                         Toast.makeText(this@FourteenthActivity, obj.optString("message", "Update failed"), Toast.LENGTH_SHORT).show()
                     }
