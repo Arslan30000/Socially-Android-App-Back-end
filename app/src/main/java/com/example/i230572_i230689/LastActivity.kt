@@ -9,23 +9,24 @@ import android.widget.LinearLayout
 import android.widget.RelativeLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.*
+import com.android.volley.DefaultRetryPolicy
+import com.android.volley.toolbox.StringRequest
+import com.android.volley.toolbox.Volley
+import org.json.JSONObject
 
 class LastActivity : AppCompatActivity() {
 
-    private lateinit var db: DatabaseReference
-    private lateinit var auth: FirebaseAuth
+    private lateinit var sessionManager: SessionManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.profile_page)
 
-        auth = FirebaseAuth.getInstance()
-        db = FirebaseDatabase.getInstance().getReference("users")
+        sessionManager = SessionManager(this)
 
-        val uid = auth.currentUser?.uid
-        if (uid != null) loadUserData(uid)
+        if (sessionManager.isLoggedIn()) {
+            loadUserData()
+        }
 
         findViewById<ImageView>(R.id.search_icon).setOnClickListener {
             startActivity(Intent(this, SixthActivity::class.java))
@@ -54,46 +55,73 @@ class LastActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.no_2).setOnClickListener {
             val intent = Intent(this, FollowersListActivity::class.java)
             intent.putExtra("type", "followers")
+            intent.putExtra("userId", sessionManager.getUserId().toString())
             startActivity(intent)
         }
         findViewById<TextView>(R.id.no_3).setOnClickListener {
             val intent = Intent(this, FollowersListActivity::class.java)
             intent.putExtra("type", "following")
+            intent.putExtra("userId", sessionManager.getUserId().toString())
             startActivity(intent)
         }
 
     }
 
-    private fun loadUserData(uid: String) {
-        db.child(uid).addListenerForSingleValueEvent(object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                if (!snapshot.exists()) return
+    override fun onResume() {
+        super.onResume()
+        if (sessionManager.isLoggedIn()) loadUserData()
+    }
 
-                val username = snapshot.child("username").value?.toString() ?: "Unknown"
-                val bio = snapshot.child("bio").value?.toString() ?: "No bio yet"
-                val followers = snapshot.child("followers").childrenCount.toInt()
-                val following = snapshot.child("following").childrenCount.toInt()
-                val imageBase64 = snapshot.child("imageBase64").value?.toString() ?: ""
-                val posts = snapshot.child("posts").childrenCount.toInt()
+    private fun loadUserData() {
+        val token = sessionManager.getToken() ?: return
+        val userId = sessionManager.getUserId()
+        val url = "https://nonactinically-unkindhearted-shelli.ngrok-free.dev/instagram_api/get_profile.php?user_id=$userId"
+        val rq = Volley.newRequestQueue(this)
 
-                findViewById<TextView>(R.id.name).text = username
-                findViewById<TextView>(R.id.description).text = bio
-                findViewById<TextView>(R.id.no_2).text = followers.toString()
-                findViewById<TextView>(R.id.no_3).text = following.toString()
-                findViewById<TextView>(R.id.no_1).text = posts.toString()
+        val req = object : StringRequest(Method.GET, url,
+            { response ->
+                try {
+                    val obj = JSONObject(response.trim())
+                    if (obj.optBoolean("success", false)) {
+                        val userObj = obj.getJSONObject("user")
+                        val counts = obj.getJSONObject("counts")
 
+                        val username = userObj.optString("username", "Unknown")
+                        val bio = userObj.optString("bio", "No bio yet")
+                        val followers = counts.optInt("followers", 0)
+                        val following = counts.optInt("following", 0)
+                        val posts = counts.optInt("posts", 0)
+                        val imageBase64 = userObj.optString("imageBase64", "")
 
-                if (imageBase64.isNotEmpty()) {
-                    try {
-                        val bytes = Base64.decode(imageBase64, Base64.DEFAULT)
-                        val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                        findViewById<ImageView>(R.id.profile_main).setImageBitmap(bmp)
-                        findViewById<ImageView>(R.id.profile_icon).setImageBitmap(bmp)
-                    } catch (_: Exception) {}
+                        findViewById<TextView>(R.id.name).text = username
+                        findViewById<TextView>(R.id.title_text).text = username
+                        findViewById<TextView>(R.id.description).text = bio
+                        findViewById<TextView>(R.id.no_2).text = followers.toString()
+                        findViewById<TextView>(R.id.no_3).text = following.toString()
+                        findViewById<TextView>(R.id.no_1).text = posts.toString()
+
+                        if (imageBase64.isNotEmpty()) {
+                            try {
+                                val bytes = Base64.decode(imageBase64, Base64.DEFAULT)
+                                val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                                findViewById<ImageView>(R.id.profile_main).setImageBitmap(bmp)
+                                findViewById<ImageView>(R.id.profile_icon).setImageBitmap(bmp)
+                            } catch (_: Exception) {}
+                        }
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
                 }
+            },
+            { error -> error.printStackTrace() }) {
+            override fun getHeaders(): MutableMap<String, String> {
+                val headers = HashMap<String, String>()
+                headers["Authorization"] = "Bearer $token"
+                return headers
             }
+        }
 
-            override fun onCancelled(error: DatabaseError) {}
-        })
+        req.retryPolicy = DefaultRetryPolicy(15000, DefaultRetryPolicy.DEFAULT_MAX_RETRIES, DefaultRetryPolicy.DEFAULT_BACKOFF_MULT)
+        rq.add(req)
     }
 }

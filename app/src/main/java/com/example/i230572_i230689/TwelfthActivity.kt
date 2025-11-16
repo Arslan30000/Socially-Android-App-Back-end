@@ -6,6 +6,8 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.widget.ImageView
 import android.widget.RelativeLayout
 import androidx.appcompat.app.AppCompatActivity
@@ -13,22 +15,31 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.*
+import com.android.volley.DefaultRetryPolicy
+import com.android.volley.toolbox.StringRequest
+import com.android.volley.toolbox.Volley
+import org.json.JSONObject
 
 class TwelfthActivity : AppCompatActivity() {
 
     private lateinit var recyclerView: RecyclerView
     private lateinit var adapter: RequestAdapter
     private val requestsList = mutableListOf<FollowRequest>()
-    private lateinit var db: DatabaseReference
-    private val auth = FirebaseAuth.getInstance()
+    private lateinit var sessionManager: SessionManager
+    private val handler = Handler(Looper.getMainLooper())
+    private val pollIntervalMs: Long = 15_000
+    private val pollRunnable = object : Runnable {
+        override fun run() {
+            loadFollowRequests()
+            handler.postDelayed(this, pollIntervalMs)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.your_activity)
 
-        db = FirebaseDatabase.getInstance().reference
+        sessionManager = SessionManager(this)
         recyclerView = findViewById(R.id.followRequestRecycler)
         recyclerView.layoutManager = LinearLayoutManager(this)
 
@@ -38,73 +49,84 @@ class TwelfthActivity : AppCompatActivity() {
         recyclerView.adapter = adapter
 
         loadFollowRequests()
-        listenForNewRequests()
+        handler.post(pollRunnable)
         setupNavigation()
     }
 
     private fun loadFollowRequests() {
-        val uid = auth.currentUser?.uid ?: return
-        db.child("users").child(uid).child("followRequests").addListenerForSingleValueEvent(object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                requestsList.clear()
-                for (req in snapshot.children) {
-                    val requesterId = req.key ?: continue
-                    if (req.value == true) {
-                        db.child("users").child(requesterId).addListenerForSingleValueEvent(object : ValueEventListener {
-                            override fun onDataChange(data: DataSnapshot) {
-                                val user = data.getValue(User::class.java)
-                                user?.let {
-                                    requestsList.add(
-                                        FollowRequest(
-                                            uid = user.uid,
-                                            username = user.username,
-                                            imageBase64 = user.imageBase64,
-                                            timestamp = System.currentTimeMillis()
-                                        )
-                                    )
-                                    adapter.notifyDataSetChanged()
-                                }
+        val token = sessionManager.getToken() ?: return
+        val url = "https://nonactinically-unkindhearted-shelli.ngrok-free.dev/instagram_api/get_follow_requests.php"
+        val rq = Volley.newRequestQueue(this)
+
+        val req = object : StringRequest(Method.GET, url,
+            { response ->
+                try {
+                    val obj = JSONObject(response.trim())
+                    if (obj.optBoolean("success", false)) {
+                        val arr = obj.optJSONArray("requests")
+                        requestsList.clear()
+                        if (arr != null) {
+                            for (i in 0 until arr.length()) {
+                                val r = arr.getJSONObject(i)
+                                val uid = r.optInt("from_user_id").toString()
+                                val username = r.optString("username")
+                                val image = r.optString("imageBase64", "")
+                                requestsList.add(FollowRequest(uid = uid, username = username, imageBase64 = image, timestamp = System.currentTimeMillis()))
                             }
-                            override fun onCancelled(error: DatabaseError) {}
-                        })
+                        }
+                        adapter.notifyDataSetChanged()
                     }
+                } catch (e: Exception) {
+                    e.printStackTrace()
                 }
+            },
+            { error -> error.printStackTrace() }) {
+            override fun getHeaders(): MutableMap<String, String> {
+                val headers = HashMap<String, String>()
+                headers["Authorization"] = "Bearer ${sessionManager.getToken()}"
+                return headers
             }
-            override fun onCancelled(error: DatabaseError) {}
-        })
+        }
+
+        req.retryPolicy = DefaultRetryPolicy(15000, DefaultRetryPolicy.DEFAULT_MAX_RETRIES, DefaultRetryPolicy.DEFAULT_BACKOFF_MULT)
+        rq.add(req)
     }
 
-    private fun listenForNewRequests() {
-        val uid = auth.currentUser?.uid ?: return
-        db.child("users").child(uid).child("followRequests")
-            .addChildEventListener(object : ChildEventListener {
-                override fun onChildAdded(snapshot: DataSnapshot, previousChildName: String?) {
-                    val requesterId = snapshot.key ?: return
-                    if (snapshot.value == true) {
-                        db.child("users").child(requesterId).child("username").get()
-                            .addOnSuccessListener {
-                                val name = it.value?.toString() ?: "Someone"
-                                showNotification("New Follow Request", "$name sent you a follow request")
-                            }
-                    }
-                }
-                override fun onChildChanged(snapshot: DataSnapshot, previousChildName: String?) {}
-                override fun onChildRemoved(snapshot: DataSnapshot) {}
-                override fun onChildMoved(snapshot: DataSnapshot, previousChildName: String?) {}
-                override fun onCancelled(error: DatabaseError) {}
-            })
-    }
+    // We replaced realtime listeners with periodic polling via handler/pollRunnable above.
 
     private fun acceptFollowRequest(request: FollowRequest) {
-        val currentUid = auth.currentUser?.uid ?: return
-        val requesterUid = request.uid
+        val token = sessionManager.getToken() ?: return
+        val url = "https://nonactinically-unkindhearted-shelli.ngrok-free.dev/instagram_api/accept_follow_request.php"
+        val rq = Volley.newRequestQueue(this)
 
-        db.child("users").child(currentUid).child("followers").child(requesterUid).setValue(true)
-        db.child("users").child(requesterUid).child("following").child(currentUid).setValue(true)
-        db.child("users").child(currentUid).child("followRequests").child(requesterUid).removeValue()
+        val req = object : StringRequest(Method.POST, url,
+            { response ->
+                try {
+                    val obj = JSONObject(response.trim())
+                    if (obj.optBoolean("success", false)) {
+                        requestsList.remove(request)
+                        adapter.notifyDataSetChanged()
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            },
+            { error -> error.printStackTrace() }) {
+            override fun getParams(): MutableMap<String, String> {
+                val map = HashMap<String, String>()
+                map["from_user_id"] = request.uid
+                return map
+            }
 
-        requestsList.remove(request)
-        adapter.notifyDataSetChanged()
+            override fun getHeaders(): MutableMap<String, String> {
+                val headers = HashMap<String, String>()
+                headers["Authorization"] = "Bearer ${sessionManager.getToken()}"
+                return headers
+            }
+        }
+
+        req.retryPolicy = DefaultRetryPolicy(15000, DefaultRetryPolicy.DEFAULT_MAX_RETRIES, DefaultRetryPolicy.DEFAULT_BACKOFF_MULT)
+        rq.add(req)
     }
 
     private fun showNotification(title: String, body: String) {
@@ -157,5 +179,10 @@ class TwelfthActivity : AppCompatActivity() {
         findViewById<de.hdodenhof.circleimageview.CircleImageView>(R.id.profile_icon).setOnClickListener {
             startActivity(Intent(this, LastActivity::class.java))
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        handler.removeCallbacks(pollRunnable)
     }
 }

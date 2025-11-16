@@ -4,8 +4,8 @@
     android:padding="12dp"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@color/white">
-
+    android:background="@color/white"
+    android:gravity="center_vertical">
 
     <de.hdodenhof.circleimageview.CircleImageView
         android:id="@+id/profile_image"
@@ -17,8 +17,9 @@
     <LinearLayout
         android:orientation="vertical"
         android:layout_marginStart="15dp"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content">
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1">
 
         <TextView
             android:layout_height="wrap_content"
@@ -27,8 +28,15 @@
             android:textSize="16sp"
             android:textColor="@color/black"
             android:text="username"/>
-
-
     </LinearLayout>
+
+    <Button
+        android:id="@+id/action_button"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Unfollow"
+        android:padding="8dp"
+        android:textSize="12sp"
+        android:visibility="gone" />
 
 </LinearLayout>

@@ -35,7 +35,7 @@ class FourthActivity : AppCompatActivity() {
             data["username"] = username
             data["password"] = password
 
-            val url = "http://192.168.100.10/instagram_api/login.php"
+            val url = "https://nonactinically-unkindhearted-shelli.ngrok-free.dev/instagram_api/login.php"
             val rq = Volley.newRequestQueue(this)
 
             val req = object : StringRequest(Method.POST, url,

@@ -7,8 +7,10 @@ import android.widget.*
 import android.os.Bundle
 import android.widget.LinearLayout.LayoutParams
 import androidx.appcompat.app.AppCompatActivity
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.*
+import com.android.volley.DefaultRetryPolicy
+import com.android.volley.toolbox.StringRequest
+import com.android.volley.toolbox.Volley
+import org.json.JSONObject
 
 class SeventhActivity : AppCompatActivity() {
 
@@ -18,15 +20,13 @@ class SeventhActivity : AppCompatActivity() {
     private lateinit var tabAccounts: TextView
     private lateinit var tabTags: TextView
     private lateinit var tabPlaces: TextView
-    private lateinit var dbRef: DatabaseReference
-    private lateinit var auth: FirebaseAuth
+    private lateinit var sessionManager: SessionManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.searching)
 
-        auth = FirebaseAuth.getInstance()
-        dbRef = FirebaseDatabase.getInstance().getReference("users")
+        sessionManager = SessionManager(this)
 
         searchInput = findViewById(R.id.search_text)
         resultsLayout = findViewById(R.id.results_container)
@@ -46,8 +46,10 @@ class SeventhActivity : AppCompatActivity() {
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 if (tabAccounts.currentTextColor == getColor(R.color.black)) {
                     val query = s.toString().trim()
-                    if (query.isNotEmpty()) searchUser(query)
-                    else resultsLayout.removeAllViews()
+                    if (query.isNotEmpty()) {
+                        // Use exact-match lookup to avoid duplicate/infinite results
+                        searchUserExact(query)
+                    } else resultsLayout.removeAllViews()
                 }
             }
             override fun afterTextChanged(s: android.text.Editable?) {}
@@ -75,29 +77,42 @@ class SeventhActivity : AppCompatActivity() {
         }
     }
 
-    private fun searchUser(query: String) {
+    private fun searchUserExact(query: String) {
         resultsLayout.removeAllViews()
-        val addedUids = mutableSetOf<String>()
-        val currentUid = auth.currentUser?.uid ?: return
+        val token = sessionManager.getToken() ?: run { Toast.makeText(this, "Not logged in", Toast.LENGTH_SHORT).show(); return }
+        val url = "https://nonactinically-unkindhearted-shelli.ngrok-free.dev/instagram_api/get_user_by_username.php?username=${java.net.URLEncoder.encode(query, "utf-8")}" 
+        val rq = Volley.newRequestQueue(this)
 
-        dbRef.get().addOnSuccessListener { snapshot ->
-            for (userSnap in snapshot.children) {
-                val username = userSnap.child("username").value?.toString() ?: continue
-                val targetUid = userSnap.key ?: continue
-
-                if (targetUid == currentUid) continue
-
-                if (username.equals(query, ignoreCase = true) && !addedUids.contains(targetUid)) {
-                    addedUids.add(targetUid)
-                    val imageBase64 = userSnap.child("imageBase64").value?.toString()
-
-                    val followRequests = userSnap.child("followRequests")
-                    val alreadyRequested = followRequests.hasChild(currentUid)
-
-                    addUserResult(username, imageBase64, targetUid, alreadyRequested)
+        val req = object : StringRequest(Method.GET, url,
+            { response ->
+                try {
+                    val obj = JSONObject(response.trim())
+                    if (obj.optBoolean("success", false)) {
+                        val userObj = obj.getJSONObject("user")
+                        val uid = userObj.optInt("id").toString()
+                        val username = userObj.optString("username")
+                        val imageBase64 = userObj.optString("imageBase64", "")
+                        val alreadyRequested = obj.optJSONObject("relationship")?.optBoolean("has_requested", false) ?: false
+                        addUserResult(username, imageBase64, uid, alreadyRequested)
+                    } else {
+                        // no result - keep layout empty
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
                 }
+            },
+            { error ->
+                error.printStackTrace()
+            }) {
+            override fun getHeaders(): MutableMap<String, String> {
+                val headers = HashMap<String, String>()
+                headers["Authorization"] = "Bearer ${sessionManager.getToken()}"
+                return headers
             }
         }
+
+        req.retryPolicy = DefaultRetryPolicy(15000, DefaultRetryPolicy.DEFAULT_MAX_RETRIES, DefaultRetryPolicy.DEFAULT_BACKOFF_MULT)
+        rq.add(req)
     }
 
     private fun addUserResult(username: String, imageBase64: String?, targetUid: String, alreadyRequested: Boolean) {
@@ -137,11 +152,14 @@ class SeventhActivity : AppCompatActivity() {
             followBtn.setBackgroundColor(getColor(R.color.brown))
             followBtn.setTextColor(Color.WHITE)
             followBtn.setOnClickListener {
-                sendFollowRequest(targetUid)
-                followBtn.text = "Requested"
-                followBtn.isEnabled = false
-                followBtn.setBackgroundColor(getColor(R.color.light_grey))
-                followBtn.setTextColor(Color.BLACK)
+                sendFollowRequest(targetUid) { success ->
+                    if (success) {
+                        followBtn.text = "Requested"
+                        followBtn.isEnabled = false
+                        followBtn.setBackgroundColor(getColor(R.color.light_grey))
+                        followBtn.setTextColor(Color.BLACK)
+                    }
+                }
             }
         }
 
@@ -151,9 +169,45 @@ class SeventhActivity : AppCompatActivity() {
         resultsLayout.addView(row)
     }
 
-    private fun sendFollowRequest(targetUid: String) {
-        val currentUid = auth.currentUser?.uid ?: return
-        dbRef.child(targetUid).child("followRequests").child(currentUid).setValue(true)
-        Toast.makeText(this, "Follow request sent", Toast.LENGTH_SHORT).show()
+    private fun sendFollowRequest(targetUid: String, callback: ((Boolean) -> Unit)? = null) {
+        val token = sessionManager.getToken() ?: return
+        val url = "https://nonactinically-unkindhearted-shelli.ngrok-free.dev/instagram_api/send_follow_request.php"
+        val rq = Volley.newRequestQueue(this)
+
+        val req = object : StringRequest(Method.POST, url,
+            { response ->
+                try {
+                    val obj = JSONObject(response.trim())
+                    if (obj.optBoolean("success", false)) {
+                        Toast.makeText(this, "Follow request sent", Toast.LENGTH_SHORT).show()
+                        callback?.invoke(true)
+                    } else {
+                        Toast.makeText(this, obj.optString("message", "Request failed"), Toast.LENGTH_SHORT).show()
+                        callback?.invoke(false)
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    callback?.invoke(false)
+                }
+            },
+            { error ->
+                error.printStackTrace()
+                callback?.invoke(false)
+            }) {
+            override fun getParams(): MutableMap<String, String> {
+                val map = HashMap<String, String>()
+                map["to_user_id"] = targetUid
+                return map
+            }
+
+            override fun getHeaders(): MutableMap<String, String> {
+                val headers = HashMap<String, String>()
+                headers["Authorization"] = "Bearer $token"
+                return headers
+            }
+        }
+
+        req.retryPolicy = DefaultRetryPolicy(15000, DefaultRetryPolicy.DEFAULT_MAX_RETRIES, DefaultRetryPolicy.DEFAULT_BACKOFF_MULT)
+        rq.add(req)
     }
 }

@@ -10,8 +10,10 @@ import android.provider.MediaStore
 import android.util.Base64
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.FirebaseDatabase
+import com.android.volley.DefaultRetryPolicy
+import com.android.volley.toolbox.StringRequest
+import com.android.volley.toolbox.Volley
+import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 
 class FourteenthActivity : AppCompatActivity() {
@@ -20,10 +22,10 @@ class FourteenthActivity : AppCompatActivity() {
     private lateinit var usernameField: EditText
     private lateinit var bioField: EditText
     private lateinit var emailField: EditText
+    private lateinit var phoneField: EditText
+    private lateinit var genderField: EditText
     private lateinit var profilePic: de.hdodenhof.circleimageview.CircleImageView
-
-    private lateinit var auth: FirebaseAuth
-    private val db = FirebaseDatabase.getInstance().getReference("users")
+    private lateinit var sessionManager: SessionManager
 
     private var encodedImage = ""
     private val PICK_IMAGE = 101
@@ -36,12 +38,15 @@ class FourteenthActivity : AppCompatActivity() {
         usernameField = findViewById(R.id.username_field)
         bioField = findViewById(R.id.bio_field)
         emailField = findViewById(R.id.email_field)
+        phoneField = findViewById(R.id.phone_field)
+        genderField = findViewById(R.id.field_gender)
         profilePic = findViewById(R.id.profile_pic)
 
-        auth = FirebaseAuth.getInstance()
-        val uid = auth.currentUser?.uid ?: return
+        sessionManager = SessionManager(this)
 
-        loadUserData(uid)
+        if (sessionManager.isLoggedIn()) {
+            loadUserData()
+        }
 
         findViewById<TextView>(R.id.cancel_btn).setOnClickListener {
             startActivity(Intent(this, LastActivity::class.java))
@@ -49,7 +54,7 @@ class FourteenthActivity : AppCompatActivity() {
         }
 
         findViewById<TextView>(R.id.done_btn).setOnClickListener {
-            saveChanges(uid)
+            saveChanges()
         }
 
         findViewById<TextView>(R.id.change_photo).setOnClickListener {
@@ -57,56 +62,121 @@ class FourteenthActivity : AppCompatActivity() {
         }
     }
 
-    private fun loadUserData(uid: String) {
-        db.child(uid).get().addOnSuccessListener { snapshot ->
-            if (snapshot.exists()) {
-                val name = snapshot.child("name").value?.toString() ?: ""
-                val username = snapshot.child("username").value?.toString() ?: ""
-                val email = snapshot.child("email").value?.toString() ?: ""
-                val bio = snapshot.child("bio").value?.toString() ?: ""
-                val imageBase64 = snapshot.child("imageBase64").value?.toString() ?: ""
+    private fun loadUserData() {
+        val token = sessionManager.getToken() ?: return
+        val userId = sessionManager.getUserId()
+        val url = "https://nonactinically-unkindhearted-shelli.ngrok-free.dev/instagram_api/get_profile.php?user_id=$userId"
+        val rq = Volley.newRequestQueue(this)
 
-                nameField.setText(name)
-                usernameField.setText(username)
-                emailField.setText(email)
-                bioField.setText(bio)
+        val req = object : StringRequest(Method.GET, url,
+            { response ->
+                try {
+                    val obj = JSONObject(response.trim())
+                    if (obj.optBoolean("success", false)) {
+                        val userObj = obj.getJSONObject("user")
 
-                if (imageBase64.isNotEmpty()) {
-                    val bytes = Base64.decode(imageBase64, Base64.DEFAULT)
-                    val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                    profilePic.setImageBitmap(bmp)
-                    encodedImage = imageBase64
+                        val name = userObj.optString("name", "")
+                        val username = userObj.optString("username", "")
+                        val email = userObj.optString("email", "")
+                        val bio = userObj.optString("bio", "")
+                        val phone = userObj.optString("phone", "")
+                        val gender = userObj.optString("gender", "")
+                        val imageBase64 = userObj.optString("imageBase64", "")
+
+                        nameField.setText(name)
+                        usernameField.setText(username)
+                        emailField.setText(email)
+                        bioField.setText(bio)
+                        phoneField.setText(phone)
+                        genderField.setText(gender)
+
+                        if (imageBase64.isNotEmpty()) {
+                            val bytes = Base64.decode(imageBase64, Base64.DEFAULT)
+                            val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                            profilePic.setImageBitmap(bmp)
+                            encodedImage = imageBase64
+                        }
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
                 }
+            },
+            { error -> error.printStackTrace() }) {
+            override fun getHeaders(): MutableMap<String, String> {
+                val headers = HashMap<String, String>()
+                headers["Authorization"] = "Bearer $token"
+                return headers
             }
         }
+
+        req.retryPolicy = DefaultRetryPolicy(15000, DefaultRetryPolicy.DEFAULT_MAX_RETRIES, DefaultRetryPolicy.DEFAULT_BACKOFF_MULT)
+        rq.add(req)
     }
 
-    private fun saveChanges(uid: String) {
+    private fun saveChanges() {
+        val token = sessionManager.getToken() ?: run { Toast.makeText(this, "Not logged in", Toast.LENGTH_SHORT).show(); return }
+        val userId = sessionManager.getUserId()
+        
         val name = nameField.text.toString().trim()
         val username = usernameField.text.toString().trim()
         val email = emailField.text.toString().trim()
         val bio = bioField.text.toString().trim()
+        val phone = phoneField.text.toString().trim()
+        val gender = genderField.text.toString().trim()
 
         if (name.isEmpty() || username.isEmpty() || email.isEmpty()) {
-            Toast.makeText(this, "Fields cannot be empty", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Required fields cannot be empty", Toast.LENGTH_SHORT).show()
             return
         }
 
-        val updates = mapOf(
-            "name" to name,
-            "username" to username,
-            "email" to email,
-            "bio" to bio,
-            "imageBase64" to encodedImage
-        )
+        val url = "https://nonactinically-unkindhearted-shelli.ngrok-free.dev/instagram_api/update_profile.php"
+        val rq = Volley.newRequestQueue(this)
 
-        db.child(uid).updateChildren(updates).addOnSuccessListener {
-            Toast.makeText(this, "Profile updated", Toast.LENGTH_SHORT).show()
-            startActivity(Intent(this, LastActivity::class.java))
-            finish()
-        }.addOnFailureListener {
-            Toast.makeText(this, "Failed to update", Toast.LENGTH_SHORT).show()
+        val req = object : StringRequest(Method.POST, url,
+            { response ->
+                try {
+                    val obj = JSONObject(response.trim())
+                    if (obj.optBoolean("success", false)) {
+                        // update stored username so UI shows new value immediately
+                        try {
+                            sessionManager.saveSession(token, userId, username)
+                        } catch (_: Exception) {}
+                        Toast.makeText(this@FourteenthActivity, "Profile updated successfully", Toast.LENGTH_SHORT).show()
+                        startActivity(Intent(this@FourteenthActivity, LastActivity::class.java))
+                        finish()
+                    } else {
+                        Toast.makeText(this@FourteenthActivity, obj.optString("message", "Update failed"), Toast.LENGTH_SHORT).show()
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    Toast.makeText(this@FourteenthActivity, "Error updating profile", Toast.LENGTH_SHORT).show()
+                }
+            },
+            { error ->
+                error.printStackTrace()
+                Toast.makeText(this@FourteenthActivity, "Network error", Toast.LENGTH_SHORT).show()
+            }) {
+            override fun getParams(): MutableMap<String, String> {
+                val params = HashMap<String, String>()
+                params["name"] = name
+                params["username"] = username
+                params["email"] = email
+                params["bio"] = bio
+                params["phone"] = phone
+                params["gender"] = gender
+                params["imageBase64"] = encodedImage
+                return params
+            }
+
+            override fun getHeaders(): MutableMap<String, String> {
+                val headers = HashMap<String, String>()
+                headers["Authorization"] = "Bearer $token"
+                return headers
+            }
         }
+
+        req.retryPolicy = DefaultRetryPolicy(15000, DefaultRetryPolicy.DEFAULT_MAX_RETRIES, DefaultRetryPolicy.DEFAULT_BACKOFF_MULT)
+        rq.add(req)
     }
 
     private fun pickImageFromGallery() {
