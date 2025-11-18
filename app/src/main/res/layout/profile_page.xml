@@ -41,7 +41,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="5dp"
-                android:text="@string/Jacob_w"
+                android:text=""
                 android:layout_toEndOf="@id/lock_"
                 android:textColor="@color/brown"
                 android:layout_centerVertical="true"

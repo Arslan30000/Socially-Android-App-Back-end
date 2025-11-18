@@ -55,7 +55,14 @@ data class Message(
     var imageBase64: String = "",
     var postId: String = "",
     var timestamp: Long = 0,
-    val chatId: String = ""
+    val chatId: String = "",
+    // New fields to support server messages
+    var attachmentUrl: String = "",
+    var type: String = "text",
+    var isSeen: Boolean = false,
+    var isDeleted: Boolean = false,
+    var vanishOnClose: Boolean = false,
+    var isEdited: Boolean = false
 )
 
 data class Chat(
@@ -91,5 +98,7 @@ data class User(
     var posts: Map<String, Post> = emptyMap(),
     var stories: Map<String, Story> = emptyMap(),
     var chats: Map<String, Chat> = emptyMap(),
-    var messages: Map<String, Map<String, Message>> = emptyMap()
+    var messages: Map<String, Map<String, Message>> = emptyMap(),
+    var onlineStatus: String = "offline",  // "online" or "offline"
+    var lastSeen: String? = null
 )

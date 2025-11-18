@@ -18,7 +18,7 @@
             android:id="@+id/message_bubble"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:background="@drawable/chat_bubble"
+            android:background="@drawable/chat_bubble_received"
             android:padding="10dp"
             android:textColor="@android:color/black"
             android:textSize="16sp"
@@ -34,7 +34,7 @@
             android:scaleType="centerCrop"
             android:adjustViewBounds="true"
             android:visibility="gone"
-            android:background="@drawable/chat_bubble"
+            android:background="@drawable/chat_bubble_received"
             android:contentDescription="Received image" />
     </LinearLayout>
 </LinearLayout>

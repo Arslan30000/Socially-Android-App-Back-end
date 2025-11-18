@@ -36,7 +36,7 @@
                 android:id="@+id/username"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/Jacob_w"
+                android:text=""
                 android:textStyle="bold"
                 android:textSize="16sp"
                 android:textColor="@color/brown">
@@ -90,6 +90,17 @@
             android:textSize="15sp">
         </EditText>
     </RelativeLayout>
+    <!-- horizontal online followers list -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/online_recycler_view"
+        android:layout_width="match_parent"
+        android:layout_height="76dp"
+        android:layout_below="@id/search_bar"
+        android:layout_marginTop="6dp"
+        android:paddingStart="10dp"
+        android:paddingEnd="10dp"
+        android:clipToPadding="false"
+        android:orientation="horizontal" />
     <ScrollView
         android:id="@+id/messages_scroll"
         android:layout_width="match_parent"

@@ -5,6 +5,7 @@ import android.util.Base64
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import de.hdodenhof.circleimageview.CircleImageView
@@ -23,6 +24,7 @@ class ChatsAdapter(
         val username: TextView = itemView.findViewById(R.id.username)
         val lastMessage: TextView = itemView.findViewById(R.id.last_message)
         val time: TextView = itemView.findViewById(R.id.time)
+        val onlineIndicator: ImageView? = itemView.findViewById(R.id.online_status_indicator)
     }
 
     private val usersMap = mutableMapOf<String, User>()
@@ -36,30 +38,31 @@ class ChatsAdapter(
 
     override fun onBindViewHolder(holder: ChatViewHolder, position: Int) {
         val chat = chats[position]
-        val otherUserId = chat.participants.keys.first { it != currentUserId }
+        val otherUserId = chat.participants.keys.firstOrNull { it != currentUserId } ?: return
         val user = usersMap[otherUserId]
 
         if (user != null) {
-            holder.username.text = "${user.name} ${user.lastname}"
+            holder.username.text = if (user.name.isNotEmpty() || user.lastname.isNotEmpty()) {
+                "${user.name} ${user.lastname}".trim()
+            } else {
+                user.username
+            }
+            
             if (user.imageBase64.isNotEmpty()) {
-                val bytes = Base64.decode(user.imageBase64, Base64.DEFAULT)
-                val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                holder.profileImage.setImageBitmap(bitmap)
+                try {
+                    val bytes = Base64.decode(user.imageBase64, Base64.DEFAULT)
+                    val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                    holder.profileImage.setImageBitmap(bitmap)
+                } catch (e: Exception) { e.printStackTrace() }
             }
+            
+            // Show online status indicator
+            holder.onlineIndicator?.visibility = if (user.onlineStatus == "online") View.VISIBLE else View.GONE
         }
 
-        val lastMsg = messagesMap[chat.lastMessage]
-        if (lastMsg != null) {
-            holder.lastMessage.text = when {
-                lastMsg.text.isNotEmpty() -> lastMsg.text
-                lastMsg.imageBase64.isNotEmpty() -> " Image"
-                lastMsg.postId.isNotEmpty() -> " Post"
-                else -> ""
-            }
-
-            val sdf = SimpleDateFormat("hh:mm a", Locale.getDefault())
-            holder.time.text = sdf.format(Date(lastMsg.timestamp))
-        }
+        holder.lastMessage.text = chat.lastMessage
+        val sdf = SimpleDateFormat("hh:mm a", Locale.getDefault())
+        holder.time.text = sdf.format(Date(chat.lastMessageTime))
 
         holder.itemView.setOnClickListener {
             if (user != null) onChatClick(chat, user)

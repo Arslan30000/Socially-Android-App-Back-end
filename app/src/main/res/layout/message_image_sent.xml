@@ -10,6 +10,6 @@
         android:layout_height="wrap_content"
         android:adjustViewBounds="true"
         android:scaleType="centerCrop"
-        android:background="@drawable/chat_bubble"
+        android:background="@drawable/chat_bubble_sent"
         android:padding="5dp" />
 </LinearLayout>

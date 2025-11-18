@@ -45,6 +45,17 @@
             android:textSize="15sp"
             android:textColor="@color/black">
         </TextView>
+        <TextView
+            android:id="@+id/chat_status"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_below="@id/chat_name"
+            android:layout_toEndOf="@id/profile_pic"
+            android:layout_marginStart="10dp"
+            android:text="Offline"
+            android:textSize="11sp"
+            android:textColor="@color/light_grey">
+        </TextView>
         <ImageView
             android:id="@+id/video_icon"
             android:layout_width="wrap_content"
@@ -54,6 +65,15 @@
             android:layout_centerVertical="true"
             android:background="@drawable/camera_2">
         </ImageView>
+        <Switch
+            android:id="@+id/vanish_toggle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentEnd="true"
+            android:layout_marginEnd="100dp"
+            android:layout_centerVertical="true"
+            android:text="Vanish"
+            android:checked="false" />
         <ImageView
             android:id="@+id/info_icon"
             android:layout_width="wrap_content"

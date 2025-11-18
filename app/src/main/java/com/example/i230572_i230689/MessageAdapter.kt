@@ -13,7 +13,8 @@ import de.hdodenhof.circleimageview.CircleImageView
 class MessageAdapter(
     private val messages: List<Message>,
     private val currentUserId: String,
-    private val usersMap: Map<String, User>
+    private val usersMap: Map<String, User>,
+    private val onMessageLongClick: ((Message) -> Unit)? = null
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     companion object {
@@ -33,7 +34,8 @@ class MessageAdapter(
     }
 
     override fun getItemViewType(position: Int): Int {
-        return if (messages[position].senderId == currentUserId) TYPE_SENT else TYPE_RECEIVED
+        val msg = messages[position]
+        return if (msg.senderId == currentUserId) TYPE_SENT else TYPE_RECEIVED
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
@@ -53,6 +55,12 @@ class MessageAdapter(
 
         if (holder is SentViewHolder) {
             bindMessage(holder.text, holder.image, message)
+            holder.itemView.setOnLongClickListener {
+                if (message.senderId == currentUserId) {
+                    onMessageLongClick?.invoke(message)
+                    true
+                } else false
+            }
         } else if (holder is ReceivedViewHolder) {
             bindMessage(holder.text, holder.image, message)
             val user = usersMap[message.senderId]
@@ -61,16 +69,26 @@ class MessageAdapter(
                 val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                 holder.profileImage.setImageBitmap(bitmap)
             }
+            holder.itemView.setOnLongClickListener {
+                // only allow owner to long-press; received messages ignored
+                false
+            }
         }
     }
     private fun bindMessage(textView: TextView, imageView: ImageView?, message: Message) {
+        // Reset visibility
+        textView.visibility = View.GONE
+        imageView?.visibility = View.GONE
+
         if (message.text.isNotEmpty()) {
             textView.visibility = View.VISIBLE
             textView.text = message.text
-        } else {
-            textView.visibility = View.GONE
         }
-        if (message.imageBase64.isNotEmpty()) {
+        
+        if (!message.attachmentUrl.isNullOrEmpty()) {
+            imageView?.visibility = View.VISIBLE
+            loadImageFromUrl(imageView, message.attachmentUrl)
+        } else if (message.imageBase64.isNotEmpty()) {
             imageView?.visibility = View.VISIBLE
             val bytes = Base64.decode(message.imageBase64, Base64.DEFAULT)
             val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
@@ -78,9 +96,28 @@ class MessageAdapter(
 
             imageView?.adjustViewBounds = true
             imageView?.scaleType = ImageView.ScaleType.CENTER_CROP
-        } else {
-            imageView?.visibility = View.GONE
         }
+    }
+
+    private fun loadImageFromUrl(iv: ImageView?, url: String) {
+        if (iv == null || url.isEmpty()) return
+        // load on background thread, set on UI thread
+        Thread {
+            try {
+                val u = java.net.URL(url)
+                val conn = u.openConnection() as java.net.URLConnection
+                conn.connectTimeout = 10000
+                conn.readTimeout = 10000
+                val `is` = conn.getInputStream()
+                val bmp = android.graphics.BitmapFactory.decodeStream(`is`)
+                `is`.close()
+                if (bmp != null) {
+                    iv.post { iv.setImageBitmap(bmp) }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }.start()
     }
 
     override fun getItemCount(): Int = messages.size
