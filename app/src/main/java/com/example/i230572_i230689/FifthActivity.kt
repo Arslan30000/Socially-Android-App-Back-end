@@ -4,6 +4,8 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.MediaStore
 import android.util.Base64
 import android.util.Log
@@ -26,12 +28,14 @@ class FifthActivity : AppCompatActivity() {
     private lateinit var storyAdapter: StoryAdapter
     private val storyList = mutableListOf<Story>()
 
-
     private lateinit var postsRecyclerView: RecyclerView
     private lateinit var postAdapter: PostAdapter
     private val postList = mutableListOf<Post>()
 
     private lateinit var sessionManager: SessionManager
+
+    private val feedRefreshHandler = Handler(Looper.getMainLooper())
+    private lateinit var feedRefreshRunnable: Runnable
 
     private val galleryLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == RESULT_OK) {
@@ -79,6 +83,7 @@ class FifthActivity : AppCompatActivity() {
             fetchStoriesForFeed()
             fetchPostFeed()
             fetchCurrentUserProfileForNav()
+            startFeedRefresh()
         } else {
             Log.d("FifthActivity", "User is not logged in on resume. Redirecting to login.")
             val intent = Intent(this, MainActivity::class.java)
@@ -88,17 +93,49 @@ class FifthActivity : AppCompatActivity() {
         }
     }
 
+    override fun onPause() {
+        super.onPause()
+        stopFeedRefresh()
+    }
+
+    private fun startFeedRefresh() {
+        feedRefreshRunnable = Runnable {
+            fetchPostFeed()
+            feedRefreshHandler.postDelayed(feedRefreshRunnable, 5000) // Refresh every 5 seconds
+        }
+        feedRefreshHandler.post(feedRefreshRunnable)
+    }
+
+    private fun stopFeedRefresh() {
+        feedRefreshHandler.removeCallbacks(feedRefreshRunnable)
+    }
 
     private fun setupRecyclerView() {
         recyclerViewStory = findViewById(R.id.recycler_view_story)
         recyclerViewStory.setHasFixedSize(true)
         recyclerViewStory.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
 
-        storyAdapter = StoryAdapter(this, storyList) {
-            openGallery()
+        storyAdapter = StoryAdapter(this, storyList) { story ->
+            if (story.isAddButton) {
+                if (story.hasStories) {
+                    // View own story
+                    val intent = Intent(this, NineteenActivity::class.java)
+                    intent.putExtra("USER_ID", story.userId)
+                    startActivity(intent)
+                } else {
+                    // Add new story
+                    openGallery()
+                }
+            } else {
+                // View other user's story
+                val intent = Intent(this, NineteenActivity::class.java)
+                intent.putExtra("USER_ID", story.userId)
+                startActivity(intent)
+            }
         }
         recyclerViewStory.adapter = storyAdapter
     }
+
     private fun fetchStoriesForFeed() {
         val token = sessionManager.getToken() ?: return
         val url = BuildConfig.BASE_URL + "get_stories.php"
@@ -108,25 +145,25 @@ class FifthActivity : AppCompatActivity() {
             { response ->
                 try {
                     val obj = JSONObject(response.trim())
+                    storyList.clear()
+
+                    // Always add the "Add Story" button for the current user
+                    val currentUserStory = Story(
+                        userId = sessionManager.getUserId().toString(),
+                        username = "Your Story",
+                        isAddButton = true
+                    )
+                    storyList.add(currentUserStory)
+
                     if (obj.optBoolean("success", false)) {
                         val yourStoryObj = obj.optJSONObject("your_story")
-                        val storiesArray = obj.optJSONArray("stories")
-
-                        storyList.clear()
-
                         if (yourStoryObj != null) {
-                            storyList.add(Story(
-                                storyId = yourStoryObj.optInt("id", -1).toString(),
-                                userId = yourStoryObj.optInt("userId", 0).toString(),
-                                username = yourStoryObj.optString("username", "Your Story"),
-                                userProfilePicture = yourStoryObj.optString("userProfilePicture", ""),
-                                storyImage = "",
-                                timestamp = 0L,
-                                isAddButton = true,
-                                hasStories = yourStoryObj.optBoolean("hasStories", false)
-                            ))
+                            currentUserStory.hasStories = yourStoryObj.optBoolean("hasStories", false)
+                            currentUserStory.storyImage = yourStoryObj.optString("storyImage", "")
+                            currentUserStory.userProfilePicture = yourStoryObj.optString("userProfilePicture", "")
                         }
 
+                        val storiesArray = obj.optJSONArray("stories")
                         if (storiesArray != null) {
                             for (i in 0 until storiesArray.length()) {
                                 val storyObj = storiesArray.getJSONObject(i)
@@ -141,11 +178,8 @@ class FifthActivity : AppCompatActivity() {
                                 ))
                             }
                         }
-
-                        storyAdapter.notifyDataSetChanged()
-                    } else {
-                        Log.e("StoriesFeed", obj.optString("message", "Failed to fetch stories"))
                     }
+                    storyAdapter.notifyDataSetChanged()
                 } catch (e: Exception) {
                     Log.e("StoriesFeed", "Error parsing response: ${e.message}")
                 }
@@ -156,7 +190,6 @@ class FifthActivity : AppCompatActivity() {
             override fun getHeaders(): MutableMap<String, String> {
                 val headers = HashMap<String, String>()
                 headers["Authorization"] = "Bearer $token"
-                headers["Content-Type"] = "application/x-www-form-urlencoded"
                 return headers
             }
         }
@@ -164,6 +197,7 @@ class FifthActivity : AppCompatActivity() {
         req.retryPolicy = DefaultRetryPolicy(15000, DefaultRetryPolicy.DEFAULT_MAX_RETRIES, DefaultRetryPolicy.DEFAULT_BACKOFF_MULT)
         rq.add(req)
     }
+
     private fun fetchPostFeed() {
         val token = sessionManager.getToken() ?: return
         val url = BuildConfig.BASE_URL + "get_feed.php"
@@ -213,7 +247,6 @@ class FifthActivity : AppCompatActivity() {
             override fun getHeaders(): MutableMap<String, String> {
                 val headers = HashMap<String, String>()
                 headers["Authorization"] = "Bearer $token"
-                headers["Content-Type"] = "application/x-www-form-urlencoded"
                 return headers
             }
         }

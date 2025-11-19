@@ -29,7 +29,7 @@ class FollowersListActivity : AppCompatActivity() {
 
         sessionManager = SessionManager(this)
         listType = intent.getStringExtra("type") ?: "followers"
-        
+
         adapter = UserListAdapter(userList, listType, sessionManager.getUserId())
         recyclerView.adapter = adapter
 

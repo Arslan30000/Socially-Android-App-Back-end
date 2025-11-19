@@ -5,7 +5,6 @@ import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
 import android.widget.EditText
-import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -23,9 +22,6 @@ class EightActivity : AppCompatActivity() {
     private val chats = mutableListOf<Chat>()
     private val usersMap = mutableMapOf<String, User>()
     private val messagesMap = mutableMapOf<String, Message>()
-
-    private val searchResults = mutableListOf<User>()
-    private val searchUsersMap = mutableMapOf<String, User>()
 
     private var isSearching = false
 
@@ -46,8 +42,6 @@ class EightActivity : AppCompatActivity() {
             sessionManager.getUserId().toString(),
             onChatClick = { chat, user ->
                 val intent = Intent(this, NinthActivity::class.java)
-                // If chatId starts with "search_", it's a temporary ID for a new chat.
-                // Pass an empty string to NinthActivity so it knows to create a conversation.
                 if (chat.chatId.startsWith("search_")) {
                     intent.putExtra("chatId", "")
                 } else {
@@ -64,9 +58,7 @@ class EightActivity : AppCompatActivity() {
         val onlineRv = findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.online_recycler_view)
         onlineRv.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(this, androidx.recyclerview.widget.LinearLayoutManager.HORIZONTAL, false)
         onlineRv.adapter = OnlineUserAdapter(mutableListOf()) { user ->
-            // open chat with selected follower
             val intent = Intent(this, NinthActivity::class.java)
-            // Pass an empty chatId to signal a new conversation
             intent.putExtra("chatId", "")
             intent.putExtra("otherUserId", user.uid)
             startActivity(intent)
@@ -82,7 +74,6 @@ class EightActivity : AppCompatActivity() {
         super.onResume()
         setStatus("online")
         startStatusRefresh()
-        // Refresh chats when returning to the activity
         loadChats()
     }
 
@@ -107,9 +98,7 @@ class EightActivity : AppCompatActivity() {
             if (userIds.isNotEmpty()) {
                 fetchOnlineStatusesForChats(userIds)
             }
-            // Also refresh online followers
             loadOnlineFollowers()
-            // Schedule next refresh in 5 seconds
             statusRefreshHandler?.postDelayed(statusRefreshRunnable!!, 5000)
         }
         statusRefreshHandler?.post(statusRefreshRunnable!!)
@@ -193,7 +182,6 @@ class EightActivity : AppCompatActivity() {
                             }
                         }
                         updateAdapterSorted(list)
-                        // Fetch online statuses for all users in chats
                         val userIds = usersMap.keys.toList()
                         if (userIds.isNotEmpty()) {
                             fetchOnlineStatusesForChats(userIds)
@@ -256,7 +244,6 @@ class EightActivity : AppCompatActivity() {
         } catch (e: Exception) { 0L }
     }
 
-    // fetch followers and their online statuses, show horizontally above chats
     private fun loadOnlineFollowers() {
         val token = sessionManager.getToken() ?: return
         val url = BuildConfig.BASE_URL + "get_followers.php"
@@ -278,7 +265,6 @@ class EightActivity : AppCompatActivity() {
                                 followers.add(User(uid = uid.toString(), username = it.optString("username",""), imageBase64 = it.optString("imageBase64","")))
                             }
                             if (ids.isNotEmpty()) {
-                                // call get_statuses.php
                                 fetchOnlineStatuses(followers)
                             }
                         }
@@ -319,7 +305,6 @@ class EightActivity : AppCompatActivity() {
                                 }
                             }
                         }
-                        // update horizontal recycler
                         runOnUiThread {
                             val rv = findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.online_recycler_view)
                             val adapter = rv.adapter as? OnlineUserAdapter
@@ -350,10 +335,9 @@ class EightActivity : AppCompatActivity() {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: Editable?) {
-                val query = s.toString().lowercase()
+                val query = s.toString().lowercase().trim()
                 if (query.isEmpty()) {
                     isSearching = false
-                    // Restore the original chat list
                     updateAdapterSorted(chats)
                 } else {
                     isSearching = true
@@ -364,29 +348,28 @@ class EightActivity : AppCompatActivity() {
     }
 
     private fun performSearch(query: String) {
-        searchResults.clear()
-        searchUsersMap.clear()
         val token = sessionManager.getToken() ?: return
-        val url = BuildConfig.BASE_URL + "search_users.php?q=${java.net.URLEncoder.encode(query, "UTF-8") }"
+        val url = BuildConfig.BASE_URL + "search_users.php?q=${java.net.URLEncoder.encode(query, "UTF-8")}"
         val rq = Volley.newRequestQueue(this)
         val req = object : StringRequest(Method.GET, url,
             { response ->
                 try {
                     val obj = JSONObject(response.trim())
+                    val searchResults = mutableListOf<User>()
+                    val searchUsersMap = mutableMapOf<String, User>()
                     if (obj.optBoolean("success", false)) {
                         val arr = obj.optJSONArray("users")
-                        if (arr != null) {
-                            for (i in 0 until arr.length()) {
-                                val it = arr.getJSONObject(i)
-                                val uid = it.optInt("id", -1)
-                                if (uid == -1) continue
+                        if (arr != null && arr.length() > 0) {
+                            val it = arr.getJSONObject(0) // Take only the first result
+                            val uid = it.optInt("id", -1)
+                            if (uid != -1) {
                                 val user = User(uid = uid.toString(), username = it.optString("username", ""), imageBase64 = it.optString("profileImage", ""))
                                 searchResults.add(user)
                                 searchUsersMap[user.uid] = user
                             }
-                            updateSearchAdapter()
                         }
                     }
+                    updateSearchAdapter(searchResults, searchUsersMap)
                 } catch (e: Exception) { e.printStackTrace() }
             },
             { error -> error.printStackTrace() }) {
@@ -400,10 +383,8 @@ class EightActivity : AppCompatActivity() {
         rq.add(req)
     }
 
-    private fun updateSearchAdapter() {
-        // Create a temporary list of "Chat" objects from the search results
+    private fun updateSearchAdapter(searchResults: List<User>, searchUsersMap: Map<String, User>) {
         val searchChats = searchResults.map { user ->
-            // Create a temporary Chat object with a special ID to indicate it's for a new conversation
             Chat(
                 chatId = "search_${user.uid}",
                 participants = mapOf(sessionManager.getUserId().toString() to true, user.uid to true),
@@ -411,11 +392,6 @@ class EightActivity : AppCompatActivity() {
                 lastMessageTime = System.currentTimeMillis()
             )
         }
-        // Update the adapter with the search results
         adapter.updateData(searchChats, searchUsersMap, emptyMap())
-    }
-
-    private fun deleteChat(chat: Chat) {
-        // deletion via REST not implemented on server; consider adding an endpoint
     }
 }

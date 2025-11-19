@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -5,27 +6,33 @@
     android:orientation="vertical"
     android:padding="8dp">
 
-    <TextView
-        android:id="@+id/message_bubble"
+    <FrameLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:background="@drawable/chat_bubble_sent"
-        android:padding="10dp"
-        android:textColor="@android:color/white"
-        android:textSize="16sp"
-        android:maxWidth="250dp"
-        android:visibility="gone" />
+        android:background="@drawable/chat_bubble_sent">
 
-    <ImageView
-        android:id="@+id/image_message"
-        android:layout_width="200dp"
-        android:layout_height="200dp"
-        android:layout_marginTop="4dp"
-        android:layout_marginBottom="4dp"
-        android:scaleType="centerCrop"
-        android:adjustViewBounds="true"
-        android:visibility="gone"
-        android:background="@drawable/chat_bubble_sent"
-        android:contentDescription="Sent image" />
+        <TextView
+            android:id="@+id/message_bubble"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:maxWidth="250dp"
+            android:padding="10dp"
+            android:textColor="@android:color/white"
+            android:textSize="16sp"
+            android:visibility="gone" />
+
+        <ImageView
+            android:id="@+id/image_message"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:maxWidth="240dp"
+            android:maxHeight="240dp"
+            android:adjustViewBounds="true"
+            android:contentDescription="Sent image"
+            android:padding="5dp"
+            android:scaleType="fitCenter"
+            android:visibility="gone" />
+
+    </FrameLayout>
 
 </LinearLayout>

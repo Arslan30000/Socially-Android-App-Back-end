@@ -4,6 +4,8 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.text.InputType
 import android.util.Base64
 import android.widget.EditText
@@ -18,6 +20,7 @@ import com.android.volley.toolbox.StringRequest
 import com.android.volley.toolbox.Volley
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
+import java.util.UUID
 
 class NinthActivity : AppCompatActivity() {
 
@@ -38,8 +41,10 @@ class NinthActivity : AppCompatActivity() {
     private var vanishToggleState = false
     private var isSending = false
 
-    private var statusRefreshHandler: android.os.Handler? = null
+    private var statusRefreshHandler: Handler? = null
     private var statusRefreshRunnable: Runnable? = null
+    private var messageRefreshHandler: Handler? = null
+    private var messageRefreshRunnable: Runnable? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -75,20 +80,65 @@ class NinthActivity : AppCompatActivity() {
         loadOtherUser()
         loadMessages()
         startStatusRefresh()
+        startMessageRefresh()
 
         sendButton.setOnClickListener { sendMessage() }
         galleryButton.setOnClickListener { openGallery() }
+        videoButton.setOnClickListener { initiateCall("video") }
+        audioButton.setOnClickListener { initiateCall("audio") }
+    }
+
+    private fun initiateCall(callType: String) {
+        val channelName = UUID.randomUUID().toString()
+        val token = sessionManager.getToken() ?: return
+
+        val url = BuildConfig.BASE_URL + "initiate_call.php"
+        val rq = Volley.newRequestQueue(this)
+        val req = object : StringRequest(Method.POST, url,
+            { response ->
+                try {
+                    val obj = JSONObject(response.trim())
+                    if (obj.optBoolean("success", false)) {
+                        val intent = Intent(this, TenthActivity::class.java).apply {
+                            putExtra("channel_name", channelName)
+                            putExtra("call_type", callType)
+                        }
+                        startActivity(intent)
+                    } else {
+                        Toast.makeText(this, obj.getString("message"), Toast.LENGTH_SHORT).show()
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            },
+            { error -> error.printStackTrace() }) {
+            override fun getParams(): MutableMap<String, String> {
+                val params = HashMap<String, String>()
+                params["recipient_id"] = otherUserId
+                params["channel_name"] = channelName
+                params["call_type"] = callType
+                return params
+            }
+            override fun getHeaders(): MutableMap<String, String> {
+                val headers = HashMap<String, String>()
+                headers["Authorization"] = "Bearer $token"
+                return headers
+            }
+        }
+        rq.add(req)
     }
 
     override fun onResume() {
         super.onResume()
         setStatus("online")
         startStatusRefresh()
+        startMessageRefresh()
     }
 
     override fun onPause() {
         super.onPause()
         stopStatusRefresh()
+        stopMessageRefresh()
         setStatus("offline")
         if (!chatId.isNullOrEmpty()) {
             callVanishOnClose(chatId!!)
@@ -100,11 +150,12 @@ class NinthActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         stopStatusRefresh()
+        stopMessageRefresh()
     }
     
     private fun startStatusRefresh() {
         if (statusRefreshHandler == null) {
-            statusRefreshHandler = android.os.Handler(android.os.Looper.getMainLooper())
+            statusRefreshHandler = Handler(Looper.getMainLooper())
         }
         stopStatusRefresh() // Clear any existing runnable
         statusRefreshRunnable = Runnable {
@@ -120,6 +171,26 @@ class NinthActivity : AppCompatActivity() {
     private fun stopStatusRefresh() {
         if (statusRefreshHandler != null && statusRefreshRunnable != null) {
             statusRefreshHandler?.removeCallbacks(statusRefreshRunnable!!)
+        }
+    }
+
+    private fun startMessageRefresh() {
+        if (messageRefreshHandler == null) {
+            messageRefreshHandler = Handler(Looper.getMainLooper())
+        }
+        stopMessageRefresh()
+        messageRefreshRunnable = Runnable {
+            if (!isDestroyed && !chatId.isNullOrEmpty()) {
+                loadMessages()
+            }
+            messageRefreshHandler?.postDelayed(messageRefreshRunnable!!, 2000) // Poll every 2 seconds
+        }
+        messageRefreshHandler?.post(messageRefreshRunnable!!)
+    }
+
+    private fun stopMessageRefresh() {
+        if (messageRefreshHandler != null && messageRefreshRunnable != null) {
+            messageRefreshHandler?.removeCallbacks(messageRefreshRunnable!!)
         }
     }
 
@@ -244,62 +315,100 @@ class NinthActivity : AppCompatActivity() {
 
 
     private fun loadMessages() {
-        if (!chatId.isNullOrEmpty() && chatId!!.all { it.isDigit() }) {
-            val url = BuildConfig.BASE_URL + "get_messages.php?conversation_id=$chatId&limit=200"
-            val rq = Volley.newRequestQueue(this)
-            val req = object : StringRequest(Method.GET, url,
-                { response ->
-                    try {
-                        val obj = JSONObject(response.trim())
-                        if (obj.optBoolean("success", false)) {
-                            val arr = obj.optJSONArray("messages")
-                            messages.clear()
-                            if (arr != null) {
-                                for (i in 0 until arr.length()) {
-                                    val it = arr.getJSONObject(i)
-                                    val m = Message(
-                                        messageId = it.optString("id", i.toString()),
-                                        senderId = it.optString("sender_id", ""),
-                                        receiverId = it.optString("receiver_id", ""),
-                                        text = it.optString("content", ""),
-                                        imageBase64 = "",
-                                        postId = "",
-                                        timestamp = it.optLong("created_at", 0),
-                                        chatId = it.optString("conversation_id", chatId!!),
-                                        attachmentUrl = it.optString("attachment_url", ""),
-                                        type = it.optString("type", "text"),
-                                        isSeen = it.optInt("is_seen", 0) == 1,
-                                        isDeleted = it.optInt("is_deleted", 0) == 1,
-                                        vanishOnClose = it.optInt("vanish_on_close", 0) == 1
-                                    )
-                                    if (m.type == "image" && m.attachmentUrl.isEmpty() && m.text.isNotEmpty()) {
-                                        m.imageBase64 = m.text
-                                        m.text = ""
-                                    }
-                                    messages.add(m)
-                                    cache.upsertMessage(m)
-                                }
+        if (chatId.isNullOrEmpty() || !chatId!!.all { it.isDigit() }) {
+            // If there's no valid chatId, we can't load messages.
+            // Check for cached messages for this user.
+            val cached = cache.getMessagesForConversation(otherUserId)
+            if (cached.isNotEmpty()) {
+                messages.clear()
+                messages.addAll(cached)
+                messageAdapter.notifyDataSetChanged()
+                if (messages.isNotEmpty()) recyclerView.scrollToPosition(messages.size - 1)
+            }
+            return
+        }
+
+        val url = BuildConfig.BASE_URL + "get_messages.php?conversation_id=$chatId&limit=200"
+        val rq = Volley.newRequestQueue(this)
+        val req = object : StringRequest(Method.GET, url,
+            { response ->
+                try {
+                    val obj = JSONObject(response.trim())
+                    if (obj.optBoolean("success", false)) {
+                        val arr = obj.optJSONArray("messages")
+                        val newMessages = mutableListOf<Message>()
+                        if (arr != null) {
+                            for (i in 0 until arr.length()) {
+                                val it = arr.getJSONObject(i)
+                                val m = Message(
+                                    messageId = it.optString("id", i.toString()),
+                                    senderId = it.optString("sender_id", ""),
+                                    receiverId = it.optString("receiver_id", ""),
+                                    text = it.optString("content", ""),
+                                    imageBase64 = "",
+                                    postId = "",
+                                    timestamp = it.optLong("created_at", 0),
+                                    chatId = it.optString("conversation_id", chatId!!),
+                                    attachmentUrl = it.optString("attachment_url", ""),
+                                    type = it.optString("type", "text"),
+                                    isSeen = it.optInt("is_seen", 0) == 1,
+                                    isDeleted = it.optInt("is_deleted", 0) == 1,
+                                    isEdited = it.optInt("is_edited", 0) == 1,
+                                    vanishOnClose = it.optInt("vanish_on_close", 0) == 1
+                                )
+                                newMessages.add(m)
                             }
-                            messageAdapter.notifyDataSetChanged()
-                            if (messages.isNotEmpty()) recyclerView.scrollToPosition(messages.size - 1)
-                            markSeen(chatId!!)
                         }
-                    } catch (e: Exception) { e.printStackTrace() }
-                },
-                { error -> error.printStackTrace() }) {
-                override fun getHeaders(): MutableMap<String, String> {
-                    val headers = HashMap<String, String>()
-                    headers["Authorization"] = "Bearer ${sessionManager.getToken()}"
-                    return headers
+                        
+                        // Smartly update the RecyclerView
+                        updateMessages(newMessages)
+                        
+                        markSeen(chatId!!)
+                    }
+                } catch (e: Exception) { e.printStackTrace() }
+            },
+            { error -> error.printStackTrace() }) {
+            override fun getHeaders(): MutableMap<String, String> {
+                val headers = HashMap<String, String>()
+                headers["Authorization"] = "Bearer ${sessionManager.getToken()}"
+                return headers
+            }
+        }
+        rq.add(req)
+    }
+
+    private fun updateMessages(newMessages: List<Message>) {
+        val currentMessageIds = messages.map { it.messageId }.toSet()
+        val newMessagesMap = newMessages.associateBy { it.messageId }
+        val newMessagesIds = newMessagesMap.keys
+
+        // Find messages to remove
+        val messagesToRemove = messages.filter { it.messageId !in newMessagesIds }
+        messagesToRemove.forEach { msg ->
+            val index = messages.indexOfFirst { it.messageId == msg.messageId }
+            if (index != -1) {
+                messages.removeAt(index)
+                messageAdapter.notifyItemRemoved(index)
+            }
+        }
+
+        // Find messages to add or update
+        newMessages.forEach { newMessage ->
+            val existingMessage = messages.find { it.messageId == newMessage.messageId }
+            if (existingMessage == null) {
+                // Add new message
+                messages.add(newMessage)
+                messageAdapter.notifyItemInserted(messages.size - 1)
+                recyclerView.scrollToPosition(messages.size - 1)
+            } else {
+                // Update existing message if content or edited status has changed
+                if (existingMessage.text != newMessage.text || existingMessage.isEdited != newMessage.isEdited) {
+                    existingMessage.text = newMessage.text
+                    existingMessage.isEdited = newMessage.isEdited
+                    val index = messages.indexOf(existingMessage)
+                    messageAdapter.notifyItemChanged(index)
                 }
             }
-            rq.add(req)
-        } else {
-            val conv = if (chatId.isNullOrEmpty()) otherUserId else chatId!!
-            val cached = cache.getMessagesForConversation(conv)
-            messages.clear(); messages.addAll(cached)
-            messageAdapter.notifyDataSetChanged()
-            if (messages.isNotEmpty()) recyclerView.scrollToPosition(messages.size - 1)
         }
     }
 
@@ -340,10 +449,7 @@ class NinthActivity : AppCompatActivity() {
                                 attachmentUrl = mObj.optString("attachment_url", ""),
                                 type = mObj.optString("type", "text")
                             )
-                            if (m.type == "image" && m.attachmentUrl.isEmpty() && m.text.isNotEmpty()) {
-                                m.imageBase64 = m.text; m.text = ""
-                            }
-                            // avoid duplicate inserts if message already exists
+                            
                             if (messages.none { it.messageId == m.messageId }) {
                                 messages.add(m)
                                 cache.upsertMessage(m)
@@ -351,7 +457,9 @@ class NinthActivity : AppCompatActivity() {
                                 recyclerView.scrollToPosition(messages.size - 1)
                             }
                             messageInput.text.clear()
-                            chatId = m.chatId
+                            if (chatId.isNullOrEmpty()) {
+                                chatId = m.chatId
+                            }
                         }
                     }
                 } catch (e: Exception) { e.printStackTrace() }
@@ -389,11 +497,10 @@ class NinthActivity : AppCompatActivity() {
             val outputStream = ByteArrayOutputStream()
             bitmap.compress(Bitmap.CompressFormat.JPEG, 70, outputStream)
             val bytes = outputStream.toByteArray()
-            val imgBase64 = Base64.encodeToString(bytes, Base64.DEFAULT)
-            // upload binary to server (multipart) then send message with attachment_url
+            
             Thread {
                 try {
-                    val uploadUrl = BuildConfig.BASE_URL + "upload_media.php"
+                    val uploadUrl = BuildConfig.BASE_URL + "upload_chat_media.php"
                     val boundary = "----AndroidUpload${System.currentTimeMillis()}"
                     val urlObj = java.net.URL(uploadUrl)
                     val conn = urlObj.openConnection() as java.net.HttpURLConnection
@@ -418,9 +525,7 @@ class NinthActivity : AppCompatActivity() {
                     if (json.optBoolean("success", false)) {
                         val urlPath = json.optString("url", "")
                         if (urlPath.isNotEmpty()) {
-                            // Prepend BASE_URL to get full attachment URL
-                            val fullUrl = BuildConfig.BASE_URL + urlPath
-                            sendMessageWithAttachment(fullUrl)
+                            sendMessageWithAttachment(urlPath)
                         } else {
                             runOnUiThread { Toast.makeText(this@NinthActivity, "Upload failed: no url", Toast.LENGTH_SHORT).show() }
                         }
@@ -476,7 +581,9 @@ class NinthActivity : AppCompatActivity() {
                                     recyclerView.scrollToPosition(messages.size - 1)
                                 }
                             }
-                            chatId = m.chatId
+                            if (chatId.isNullOrEmpty()) {
+                                chatId = m.chatId
+                            }
                         }
                     } else {
                         runOnUiThread { Toast.makeText(this@NinthActivity, r.optString("message", "Failed to send image"), Toast.LENGTH_SHORT).show() }
@@ -597,10 +704,7 @@ class NinthActivity : AppCompatActivity() {
                 try {
                     val r = JSONObject(response.trim())
                     if (r.optBoolean("success", false)) {
-                        msg.text = newContent
-                        msg.isEdited = true
-                        cache.markMessageEdited(msg.messageId, newContent)
-                        messageAdapter.notifyDataSetChanged()
+                        // The polling will handle the UI update
                     } else {
                         Toast.makeText(this, r.optString("message", "Failed to edit"), Toast.LENGTH_SHORT).show()
                     }
@@ -630,9 +734,7 @@ class NinthActivity : AppCompatActivity() {
                 try {
                     val r = JSONObject(response.trim())
                     if (r.optBoolean("success", false)) {
-                        messages.remove(msg)
-                        cache.deleteMessage(msg.messageId)
-                        messageAdapter.notifyDataSetChanged()
+                        // The polling will handle the UI update
                     } else {
                         Toast.makeText(
                             this,

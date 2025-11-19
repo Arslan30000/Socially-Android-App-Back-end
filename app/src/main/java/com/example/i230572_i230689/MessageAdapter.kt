@@ -70,32 +70,24 @@ class MessageAdapter(
                 holder.profileImage.setImageBitmap(bitmap)
             }
             holder.itemView.setOnLongClickListener {
-                // only allow owner to long-press; received messages ignored
                 false
             }
         }
     }
-    private fun bindMessage(textView: TextView, imageView: ImageView?, message: Message) {
-        // Reset visibility
-        textView.visibility = View.GONE
-        imageView?.visibility = View.GONE
 
-        if (message.text.isNotEmpty()) {
-            textView.visibility = View.VISIBLE
-            textView.text = message.text
-        }
-        
-        if (!message.attachmentUrl.isNullOrEmpty()) {
+    private fun bindMessage(textView: TextView, imageView: ImageView?, message: Message) {
+        val isImageMessage = message.type == "image" && !message.attachmentUrl.isNullOrEmpty()
+
+        if (isImageMessage) {
+            // This is an image message
+            textView.visibility = View.GONE
             imageView?.visibility = View.VISIBLE
             loadImageFromUrl(imageView, message.attachmentUrl)
-        } else if (message.imageBase64.isNotEmpty()) {
-            imageView?.visibility = View.VISIBLE
-            val bytes = Base64.decode(message.imageBase64, Base64.DEFAULT)
-            val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-            imageView?.setImageBitmap(bitmap)
-
-            imageView?.adjustViewBounds = true
-            imageView?.scaleType = ImageView.ScaleType.CENTER_CROP
+        } else {
+            // This is a text message
+            imageView?.visibility = View.GONE
+            textView.visibility = View.VISIBLE
+            textView.text = message.text
         }
     }
 

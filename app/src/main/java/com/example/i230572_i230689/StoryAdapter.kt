@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.util.Base64
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -16,7 +15,7 @@ import de.hdodenhof.circleimageview.CircleImageView
 class StoryAdapter(
     private val context: Context,
     private val stories: List<Story>,
-    private val onAddStoryClick: () -> Unit
+    private val onStoryClick: (Story) -> Unit
 ) : RecyclerView.Adapter<StoryAdapter.StoryViewHolder>() {
 
     class StoryViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
@@ -35,51 +34,25 @@ class StoryAdapter(
         holder.userName.text = story.username
 
         if (story.isAddButton) {
-            // --- THIS IS THE "YOUR STORY" CIRCLE ---
-            holder.addStoryPlusIcon.visibility = View.VISIBLE
-            // The plus icon ALWAYS opens the gallery to add a new story.
-            holder.addStoryPlusIcon.setOnClickListener { onAddStoryClick() }
-
-            // If the current user has stories, clicking the main image opens the viewer.
-            if (story.hasStories) {
-                // The main image click should open the user's stories for viewing.
-                holder.userImage.setOnClickListener {
-                    val intent = Intent(context, NineteenActivity::class.java).apply {
-                        putExtra("USER_ID", story.userId)
-                    }
-                    context.startActivity(intent)
-                }
-            } else {
-                // No userId present, so the user has no stories.
-                // The main image click can either do nothing or also open the gallery.
-                holder.userImage.setOnClickListener { onAddStoryClick() }
-            }
-
+            holder.addStoryPlusIcon.visibility = if (story.hasStories) View.GONE else View.VISIBLE
         } else {
-            // --- THIS IS A STORY FROM A FOLLOWED USER ---
             holder.addStoryPlusIcon.visibility = View.GONE
-            // The entire item click opens their stories for viewing.
-            holder.itemView.setOnClickListener {
-                val intent = Intent(context, NineteenActivity::class.java).apply {
-                    putExtra("USER_ID", story.userId)
-                }
-                context.startActivity(intent)
-            }
         }
 
-        // Image decoding logic (remains the same)
         if (!story.userProfilePicture.isNullOrEmpty()) {
             try {
                 val imageBytes = Base64.decode(story.userProfilePicture, Base64.DEFAULT)
                 val bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
                 holder.userImage.setImageBitmap(bitmap)
             } catch (e: Exception) {
-                // If decoding fails, show a placeholder
                 holder.userImage.setImageResource(R.drawable.profile_image)
             }
         } else {
-            // If the string is null or empty, show a placeholder
             holder.userImage.setImageResource(R.drawable.profile_image)
+        }
+
+        holder.itemView.setOnClickListener {
+            onStoryClick(story)
         }
     }
 

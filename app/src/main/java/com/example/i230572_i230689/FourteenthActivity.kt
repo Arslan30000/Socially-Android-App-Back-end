@@ -49,7 +49,6 @@ class FourteenthActivity : AppCompatActivity() {
         }
 
         findViewById<TextView>(R.id.cancel_btn).setOnClickListener {
-            startActivity(Intent(this, LastActivity::class.java))
             finish()
         }
 
@@ -64,8 +63,7 @@ class FourteenthActivity : AppCompatActivity() {
 
     private fun loadUserData() {
         val token = sessionManager.getToken() ?: return
-        val userId = sessionManager.getUserId()
-        val url = BuildConfig.BASE_URL + "get_profile.php?user_id=$userId"
+        val url = BuildConfig.BASE_URL + "get_my_profile.php"
         val rq = Volley.newRequestQueue(this)
 
         val req = object : StringRequest(Method.GET, url,
@@ -115,7 +113,6 @@ class FourteenthActivity : AppCompatActivity() {
 
     private fun saveChanges() {
         val token = sessionManager.getToken() ?: run { Toast.makeText(this, "Not logged in", Toast.LENGTH_SHORT).show(); return }
-        val userId = sessionManager.getUserId()
         
         val name = nameField.text.toString().trim()
         val username = usernameField.text.toString().trim()
@@ -137,30 +134,8 @@ class FourteenthActivity : AppCompatActivity() {
                 try {
                     val obj = JSONObject(response.trim())
                     if (obj.optBoolean("success", false)) {
-                        // update stored username so UI shows new value immediately
-                        try {
-                            sessionManager.saveSession(token, userId, username)
-                        } catch (_: Exception) {}
-
-                        // parse returned user and counts and pass to LastActivity so profile UI updates immediately
-                        try {
-                            val returnedUser = obj.optJSONObject("user")
-                            val returnedCounts = obj.optJSONObject("counts")
-                            val intent = Intent(this@FourteenthActivity, LastActivity::class.java)
-                            if (returnedUser != null) intent.putExtra("user_json", returnedUser.toString())
-                            if (returnedCounts != null) intent.putExtra("counts_json", returnedCounts.toString())
-                            // also broadcast profile update for other parts of the app
-                            try { sendBroadcast(Intent("profile_updated")) } catch (_: Exception) {}
-                            Toast.makeText(this@FourteenthActivity, "Profile updated successfully", Toast.LENGTH_SHORT).show()
-                            startActivity(intent)
-                            finish()
-                        } catch (e: Exception) {
-                            // fallback
-                            try { sendBroadcast(Intent("profile_updated")) } catch (_: Exception) {}
-                            Toast.makeText(this@FourteenthActivity, "Profile updated successfully", Toast.LENGTH_SHORT).show()
-                            startActivity(Intent(this@FourteenthActivity, LastActivity::class.java))
-                            finish()
-                        }
+                        Toast.makeText(this@FourteenthActivity, "Profile updated successfully", Toast.LENGTH_SHORT).show()
+                        finish()
                     } else {
                         Toast.makeText(this@FourteenthActivity, obj.optString("message", "Update failed"), Toast.LENGTH_SHORT).show()
                     }
@@ -181,7 +156,9 @@ class FourteenthActivity : AppCompatActivity() {
                 params["bio"] = bio
                 params["phone"] = phone
                 params["gender"] = gender
-                params["imageBase64"] = encodedImage
+                if (encodedImage.isNotEmpty()) {
+                    params["imageBase64"] = encodedImage
+                }
                 return params
             }
 

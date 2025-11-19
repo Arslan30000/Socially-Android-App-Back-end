@@ -8,18 +8,38 @@ import android.content.Intent
 import android.media.RingtoneManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import com.android.volley.toolbox.StringRequest
+import com.android.volley.toolbox.Volley
 
 class MyFirebaseMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
-        val title = remoteMessage.notification?.title ?: "New Message"
-        val body = remoteMessage.notification?.body ?: "You have a new message"
+        val data = remoteMessage.data
+        val type = data["type"]
 
+        if (type == "incoming_call") {
+            val callerId = data["caller_id"]
+            val channelName = data["channel_name"]
+            val callType = data["call_type"]
+
+            val intent = Intent(this, IncomingCallActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                putExtra("caller_id", callerId)
+                putExtra("channel_name", channelName)
+                putExtra("call_type", callType)
+            }
+            startActivity(intent)
+        } else {
+            // Handle regular chat notifications
+            val title = remoteMessage.notification?.title ?: "New Message"
+            val body = remoteMessage.notification?.body ?: "You have a new message"
+            showNotification(title, body)
+        }
+    }
+
+    private fun showNotification(title: String, body: String) {
         val intent = Intent(this, NinthActivity::class.java)
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
         val pendingIntent = PendingIntent.getActivity(
@@ -55,9 +75,30 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
     }
 
     override fun onNewToken(token: String) {
-        val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return
-        FirebaseDatabase.getInstance().reference
-            .child("users").child(userId).child("token")
-            .setValue(token)
+        val sessionManager = SessionManager(this)
+        if (sessionManager.isLoggedIn()) {
+            sendTokenToServer(token)
+        }
+    }
+
+    private fun sendTokenToServer(token: String) {
+        val sessionManager = SessionManager(this)
+        val url = BuildConfig.BASE_URL + "update_fcm_token.php"
+        val rq = Volley.newRequestQueue(this)
+        val req = object : StringRequest(Method.POST, url,
+            { response -> /* Token updated */ },
+            { error -> error.printStackTrace() }) {
+            override fun getParams(): MutableMap<String, String> {
+                val params = HashMap<String, String>()
+                params["fcm_token"] = token
+                return params
+            }
+            override fun getHeaders(): MutableMap<String, String> {
+                val headers = HashMap<String, String>()
+                headers["Authorization"] = "Bearer ${sessionManager.getToken()}"
+                return headers
+            }
+        }
+        rq.add(req)
     }
 }

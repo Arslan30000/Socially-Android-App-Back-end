@@ -2,17 +2,25 @@ package com.example.i230572_i230689
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.os.*
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.SurfaceView
 import android.view.View
-import android.widget.*
+import android.widget.FrameLayout
+import android.widget.ImageButton
+import android.widget.LinearLayout
+import android.widget.RelativeLayout
+import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.*
+import com.android.volley.toolbox.StringRequest
+import com.android.volley.toolbox.Volley
 import io.agora.rtc2.*
 import io.agora.rtc2.video.VideoCanvas
+import org.json.JSONObject
 
 class TenthActivity : AppCompatActivity() {
 
@@ -25,50 +33,39 @@ class TenthActivity : AppCompatActivity() {
     private lateinit var audioEndBtn: ImageButton
     private lateinit var audioLayout: LinearLayout
     private lateinit var videoLayout: RelativeLayout
-    private lateinit var receiverName: TextView
-    private lateinit var receiverImage: ImageView
 
     private var isVideoCall = false
-    private var isJoined = false
-    private var callTimerHandler = Handler(Looper.getMainLooper())
+    private var channelName: String? = null
+    private var appId: String? = null
+
+    private val callTimerHandler = Handler(Looper.getMainLooper())
     private var secondsPassed = 0
-    private var otherUserId = ""
-    private var currentUserId = ""
-    private val appId = "91803c0e31234583aab3d8e36549097d"
-
-    private val token = "007eJxTYPBJvcvFHWlhbCXaZtCtUhAosefovD1OE8PlStzdGNMf8iswWBpaGBgnG6QaGxoZm5haGCcmJhmnWKQam5maWBpYmqcUCX7LaAhkZFj17g8DIxSC+CwMJanFJQwMANs2G5M="
-
-    private val uid = 0
-
-    private val channelName = "test"
-
-    private lateinit var callRef: DatabaseReference
 
     private val rtcEventHandler = object : IRtcEngineEventHandler() {
         override fun onJoinChannelSuccess(channel: String?, uid: Int, elapsed: Int) {
             runOnUiThread {
-                Toast.makeText(this@TenthActivity, "✅ Joined Channel Successfully", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@TenthActivity, "Joined Channel Successfully", Toast.LENGTH_SHORT).show()
                 startTimer()
             }
         }
 
         override fun onUserJoined(uid: Int, elapsed: Int) {
             runOnUiThread {
-                Toast.makeText(this@TenthActivity, "👤 User Joined", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@TenthActivity, "User Joined", Toast.LENGTH_SHORT).show()
                 setupRemoteVideo(uid)
             }
         }
 
         override fun onUserOffline(uid: Int, reason: Int) {
             runOnUiThread {
-                Toast.makeText(this@TenthActivity, "🚫 User Left", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@TenthActivity, "User Left", Toast.LENGTH_SHORT).show()
                 endCall()
             }
         }
 
         override fun onError(err: Int) {
             runOnUiThread {
-                Toast.makeText(this@TenthActivity, "⚠️ Agora Error: $err", Toast.LENGTH_LONG).show()
+                Toast.makeText(this@TenthActivity, "Agora Error: $err", Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -85,20 +82,40 @@ class TenthActivity : AppCompatActivity() {
         audioEndBtn = findViewById(R.id.audio_end_button)
         audioLayout = findViewById(R.id.audio_layout)
         videoLayout = findViewById(R.id.video_layout)
-        receiverName = findViewById(R.id.receiver_name)
-        receiverImage = findViewById(R.id.receiver_image)
 
-        isVideoCall = intent.getBooleanExtra("isVideoCall", true)
-        otherUserId = intent.getStringExtra("otherUserId") ?: ""
-        currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: ""
-
-        callRef = FirebaseDatabase.getInstance().getReference("calls/$currentUserId")
-
-        requestPermissions()
-        setupFirebaseListener()
+        channelName = intent.getStringExtra("channel_name")
+        isVideoCall = intent.getStringExtra("call_type") == "video"
 
         videoEndBtn.setOnClickListener { endCall() }
         audioEndBtn.setOnClickListener { endCall() }
+
+        fetchAgoraConfig()
+    }
+
+    private fun fetchAgoraConfig() {
+        val url = BuildConfig.BASE_URL + "get_agora_config.php"
+        val rq = Volley.newRequestQueue(this)
+        val req = object : StringRequest(Method.GET, url,
+            { response ->
+                try {
+                    val obj = JSONObject(response.trim())
+                    if (obj.optBoolean("success", false)) {
+                        appId = obj.getString("app_id")
+                        requestPermissions()
+                    } else {
+                        Toast.makeText(this, "Failed to get Agora config", Toast.LENGTH_SHORT).show()
+                        finish()
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    finish()
+                }
+            },
+            { error ->
+                error.printStackTrace()
+                finish()
+            }) {}
+        rq.add(req)
     }
 
     private fun requestPermissions() {
@@ -117,6 +134,7 @@ class TenthActivity : AppCompatActivity() {
     }
 
     override fun onRequestPermissionsResult(reqCode: Int, perms: Array<out String>, res: IntArray) {
+        super.onRequestPermissionsResult(reqCode, perms, res)
         if (reqCode == 1 && res.all { it == PackageManager.PERMISSION_GRANTED }) {
             initAgora()
         } else {
@@ -126,6 +144,12 @@ class TenthActivity : AppCompatActivity() {
     }
 
     private fun initAgora() {
+        if (appId.isNullOrEmpty() || channelName.isNullOrEmpty()) {
+            Toast.makeText(this, "Agora config is missing", Toast.LENGTH_SHORT).show()
+            finish()
+            return
+        }
+
         try {
             val config = RtcEngineConfig().apply {
                 mContext = this@TenthActivity
@@ -135,9 +159,12 @@ class TenthActivity : AppCompatActivity() {
 
             rtcEngine = RtcEngine.create(config)
             rtcEngine?.setChannelProfile(Constants.CHANNEL_PROFILE_COMMUNICATION)
-            rtcEngine?.setClientRole(Constants.CLIENT_ROLE_BROADCASTER)
 
-            if (isVideoCall) setupVideoMode() else setupAudioMode()
+            if (isVideoCall) {
+                setupVideoMode()
+            } else {
+                setupAudioMode()
+            }
 
             val options = ChannelMediaOptions().apply {
                 channelProfile = Constants.CHANNEL_PROFILE_COMMUNICATION
@@ -148,12 +175,8 @@ class TenthActivity : AppCompatActivity() {
                 publishMicrophoneTrack = true
             }
 
-            val res = rtcEngine?.joinChannel(token, channelName, uid, options)
-            if (res != 0) {
-                Toast.makeText(this, "Join failed: $res", Toast.LENGTH_LONG).show()
-            } else {
-                isJoined = true
-            }
+            // Join channel without a token
+            rtcEngine?.joinChannel(null, channelName, 0, options)
 
         } catch (e: Exception) {
             e.printStackTrace()
@@ -164,9 +187,9 @@ class TenthActivity : AppCompatActivity() {
     private fun setupVideoMode() {
         audioLayout.visibility = View.GONE
         videoLayout.visibility = View.VISIBLE
+        rtcEngine?.enableVideo()
         val localSurface = SurfaceView(this)
         localView.addView(localSurface)
-        rtcEngine?.enableVideo()
         rtcEngine?.setupLocalVideo(VideoCanvas(localSurface, VideoCanvas.RENDER_MODE_FIT, 0))
         rtcEngine?.startPreview()
     }
@@ -178,10 +201,12 @@ class TenthActivity : AppCompatActivity() {
     }
 
     private fun setupRemoteVideo(uid: Int) {
-        remoteView.removeAllViews()
-        val surfaceView = SurfaceView(this)
-        remoteView.addView(surfaceView)
-        rtcEngine?.setupRemoteVideo(VideoCanvas(surfaceView, VideoCanvas.RENDER_MODE_FIT, uid))
+        if (isVideoCall) {
+            remoteView.removeAllViews()
+            val surfaceView = SurfaceView(this)
+            remoteView.addView(surfaceView)
+            rtcEngine?.setupRemoteVideo(VideoCanvas(surfaceView, VideoCanvas.RENDER_MODE_FIT, uid))
+        }
     }
 
     private fun startTimer() {
@@ -198,31 +223,10 @@ class TenthActivity : AppCompatActivity() {
     }
 
     private fun endCall() {
-        callRef.removeValue()
         rtcEngine?.leaveChannel()
         RtcEngine.destroy()
         rtcEngine = null
         finish()
-    }
-
-    private fun setupFirebaseListener() {
-        val otherCallRef = FirebaseDatabase.getInstance().getReference("calls/$otherUserId")
-        otherCallRef.child("status").onDisconnect().setValue("ended")
-
-        callRef.child("status").setValue("calling")
-        callRef.child("receiver").setValue(otherUserId)
-
-        otherCallRef.addValueEventListener(object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val status = snapshot.child("status").getValue(String::class.java)
-                val receiver = snapshot.child("receiver").getValue(String::class.java)
-                if (status == "calling" && receiver == currentUserId && !isJoined) {
-                    initAgora()
-                }
-            }
-
-            override fun onCancelled(error: DatabaseError) {}
-        })
     }
 
     override fun onDestroy() {
