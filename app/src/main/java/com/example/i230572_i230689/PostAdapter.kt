@@ -132,8 +132,8 @@ class PostAdapter(
             intent.putExtra("POST_ID", post.postId)
             ctx.startActivity(intent)
         }
+        //comment logic here
     }
-
     private fun setImageFromBase64(
         base64String: String,
         imageView: ImageView,

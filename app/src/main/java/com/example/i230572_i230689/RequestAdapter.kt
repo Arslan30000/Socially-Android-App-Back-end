@@ -52,3 +52,4 @@ class RequestAdapter(
 
     override fun getItemCount(): Int = requests.size
 }
+
