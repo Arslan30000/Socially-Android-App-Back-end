@@ -340,3 +340,5 @@ class FifthActivity : AppCompatActivity() {
         rq.add(req)
     }
 }
+
+//adding vanish mode here
