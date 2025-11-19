@@ -5,19 +5,13 @@
     android:layout_height="match_parent"
     android:background="@color/white2">
 
-    <ImageView
-        android:id="@+id/status_bar"
-        android:layout_width="match_parent"
-        android:layout_height="44dp"
-        android:layout_alignParentTop="true"
-        android:background="@drawable/status_bar">
-    </ImageView>
+
 
     <RelativeLayout
         android:id="@+id/menu_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_below="@id/status_bar">
+        android:layout_marginTop="25dp">
 
         <ImageView
             android:id="@+id/camera"
