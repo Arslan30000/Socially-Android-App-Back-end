@@ -1,72 +1,60 @@
 <?php
 require "db.php";
 require "helpers.php";
+require "fcm_helper.php";
 
-
-$FCM_SERVER_KEY = "YOUR_FCM_SERVER_KEY";
+$raw = file_get_contents('php://input');
+$data = json_decode($raw, true);
+if (!$data) $data = $_POST;
 
 $token = get_bearer_token();
 if (!$token) json_response(["success" => false, "message" => "No token provided"]);
 
-$stmt = $conn->prepare("SELECT user_id FROM tokens WHERE token=? AND (expires_at IS NULL OR expires_at > NOW()) LIMIT 1");
+$stmt = $conn->prepare("SELECT user_id, (SELECT username FROM users WHERE id = user_id) as username FROM tokens WHERE token=? LIMIT 1");
 $stmt->bind_param("s", $token);
 $stmt->execute();
-$stmt->store_result();
-if ($stmt->num_rows === 0) json_response(["success" => false, "message" => "Invalid token"]);
-$stmt->bind_result($caller_id);
-$stmt->fetch();
+$res = $stmt->get_result();
+if ($res->num_rows === 0) json_response(["success" => false, "message" => "Invalid token"]);
+$caller = $res->fetch_assoc();
+$caller_id = $caller['user_id'];
+$caller_name = $caller['username'];
 $stmt->close();
 
-$recipient_id = $_POST['recipient_id'] ?? 0;
-$channel_name = $_POST['channel_name'] ?? '';
-$call_type = $_POST['call_type'] ?? 'video'; // 'video' or 'audio'
+$receiver_id = isset($data['receiver_id']) ? (int)$data['receiver_id'] : 0;
+$channel_name = isset($data['channel_name']) ? $data['channel_name'] : '';
+$call_type = isset($data['call_type']) ? $data['call_type'] : 'video';
 
-if (empty($recipient_id) || empty($channel_name)) {
-    json_response(["success" => false, "message" => "Recipient ID and channel name are required."]);
+if ($receiver_id <= 0 || empty($channel_name)) {
+    json_response(["success" => false, "message" => "receiver_id and channel_name are required"]);
 }
 
-// Get the recipient's FCM token from your database
-// (Assuming you have a 'fcm_token' column in your 'users' table)
-$stmt = $conn->prepare("SELECT fcm_token FROM users WHERE id = ? LIMIT 1");
-$stmt->bind_param("i", $recipient_id);
-$stmt->execute();
-$stmt->bind_result($recipient_fcm_token);
-$stmt->fetch();
-$stmt->close();
+// Get the receiver's FCM token from the new fcm_tokens table
+$fcm_stmt = $conn->prepare("SELECT fcm_token FROM fcm_tokens WHERE user_id = ?");
+$fcm_stmt->bind_param("i", $receiver_id);
+$fcm_stmt->execute();
+$fcm_stmt->bind_result($fcm_token);
+$fcm_stmt->fetch();
+$fcm_stmt->close();
 
-if (empty($recipient_fcm_token)) {
-    json_response(["success" => false, "message" => "Recipient does not have a registered device."]);
+if (empty($fcm_token)) {
+    json_response(["success" => false, "message" => "Receiver is not available for calls"]);
 }
 
-// Prepare the notification payload
+// Prepare the data payload for the notification
 $notification_data = [
-    "to" => $recipient_fcm_token,
-    "data" => [
-        "type" => "incoming_call",
-        "caller_id" => $caller_id,
-        "channel_name" => $channel_name,
-        "call_type" => $call_type
-    ],
-    "priority" => "high"
+    "type" => "incoming_call",
+    "caller_name" => $caller_name,
+    "channel_name" => $channel_name,
+    "call_type" => $call_type
 ];
 
-// Send the notification using cURL
-$ch = curl_init("https://fcm.googleapis.com/fcm/send");
-curl_setopt($ch, CURLOPT_HTTPHEADER, [
-    "Authorization: key=" . $FCM_SERVER_KEY,
-    "Content-Type: application/json"
-]);
-curl_setopt($ch, CURLOPT_POST, 1);
-curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($notification_data));
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+// Send the notification using our new helper
+$result = send_fcm_notification($fcm_token, $notification_data);
 
-$response = curl_exec($ch);
-$http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-curl_close($ch);
-
-if ($http_code == 200) {
-    json_response(["success" => true, "message" => "Call initiated successfully."]);
+if (isset($result['name'])) {
+    json_response(["success" => true, "message" => "Call initiated successfully"]);
 } else {
-    json_response(["success" => false, "message" => "Failed to send call notification.", "fcm_response" => $response]);
+    error_log("FCM Send Error: " . json_encode($result));
+    json_response(["success" => false, "message" => "Failed to notify receiver", "fcm_response" => $result]);
 }
 ?>

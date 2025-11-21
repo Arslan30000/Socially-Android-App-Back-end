@@ -18,6 +18,10 @@ import androidx.recyclerview.widget.RecyclerView
 import com.android.volley.DefaultRetryPolicy
 import com.android.volley.toolbox.StringRequest
 import com.android.volley.toolbox.Volley
+import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.DatabaseError
+import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.ValueEventListener
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.util.UUID
@@ -45,6 +49,8 @@ class NinthActivity : AppCompatActivity() {
     private var statusRefreshRunnable: Runnable? = null
     private var messageRefreshHandler: Handler? = null
     private var messageRefreshRunnable: Runnable? = null
+
+    private lateinit var callListener: ValueEventListener
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -81,51 +87,60 @@ class NinthActivity : AppCompatActivity() {
         loadMessages()
         startStatusRefresh()
         startMessageRefresh()
+        listenForIncomingCalls()
 
         sendButton.setOnClickListener { sendMessage() }
         galleryButton.setOnClickListener { openGallery() }
+
         videoButton.setOnClickListener { initiateCall("video") }
         audioButton.setOnClickListener { initiateCall("audio") }
     }
 
     private fun initiateCall(callType: String) {
         val channelName = UUID.randomUUID().toString()
-        val token = sessionManager.getToken() ?: return
+        val callRef = FirebaseDatabase.getInstance().getReference("calls/${otherUserId}")
+        val callData = mapOf(
+            "callerId" to sessionManager.getUserId(),
+            "channelName" to channelName,
+            "callType" to callType,
+            "status" to "ringing"
+        )
+        callRef.setValue(callData).addOnSuccessListener {
+            val intent = Intent(this, TenthActivity::class.java).apply {
+                putExtra("channel_name", channelName)
+                putExtra("call_type", callType)
+            }
+            startActivity(intent)
+        }
+    }
 
-        val url = BuildConfig.BASE_URL + "initiate_call.php"
-        val rq = Volley.newRequestQueue(this)
-        val req = object : StringRequest(Method.POST, url,
-            { response ->
-                try {
-                    val obj = JSONObject(response.trim())
-                    if (obj.optBoolean("success", false)) {
-                        val intent = Intent(this, TenthActivity::class.java).apply {
+    private fun listenForIncomingCalls() {
+        val currentUserId = sessionManager.getUserId()
+        val callRef = FirebaseDatabase.getInstance().getReference("calls/$currentUserId")
+        callListener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                if (snapshot.exists()) {
+                    val status = snapshot.child("status").getValue(String::class.java)
+                    if (status == "ringing") {
+                        val callerId = snapshot.child("callerId").getValue(String::class.java)
+                        val channelName = snapshot.child("channelName").getValue(String::class.java)
+                        val callType = snapshot.child("callType").getValue(String::class.java)
+
+                        val intent = Intent(this@NinthActivity, IncomingCallActivity::class.java).apply {
+                            putExtra("caller_id", callerId)
                             putExtra("channel_name", channelName)
                             putExtra("call_type", callType)
                         }
                         startActivity(intent)
-                    } else {
-                        Toast.makeText(this, obj.getString("message"), Toast.LENGTH_SHORT).show()
                     }
-                } catch (e: Exception) {
-                    e.printStackTrace()
                 }
-            },
-            { error -> error.printStackTrace() }) {
-            override fun getParams(): MutableMap<String, String> {
-                val params = HashMap<String, String>()
-                params["recipient_id"] = otherUserId
-                params["channel_name"] = channelName
-                params["call_type"] = callType
-                return params
             }
-            override fun getHeaders(): MutableMap<String, String> {
-                val headers = HashMap<String, String>()
-                headers["Authorization"] = "Bearer $token"
-                return headers
+
+            override fun onCancelled(error: DatabaseError) {
+                // Handle error
             }
         }
-        rq.add(req)
+        callRef.addValueEventListener(callListener)
     }
 
     override fun onResume() {
@@ -151,6 +166,8 @@ class NinthActivity : AppCompatActivity() {
         super.onDestroy()
         stopStatusRefresh()
         stopMessageRefresh()
+        val currentUserId = sessionManager.getUserId()
+        FirebaseDatabase.getInstance().getReference("calls/$currentUserId").removeEventListener(callListener)
     }
     
     private fun startStatusRefresh() {
