@@ -10,44 +10,25 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
-import com.android.volley.toolbox.StringRequest
-import com.android.volley.toolbox.Volley
 
 class MyFirebaseMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
-        val data = remoteMessage.data
-        val type = data["type"]
-
-        if (type == "incoming_call") {
-            val callerId = data["caller_id"]
-            val channelName = data["channel_name"]
-            val callType = data["call_type"]
-
-            val intent = Intent(this, IncomingCallActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                putExtra("caller_id", callerId)
-                putExtra("channel_name", channelName)
-                putExtra("call_type", callType)
-            }
-            startActivity(intent)
-        } else {
-            // Handle regular chat notifications
-            val title = remoteMessage.notification?.title ?: "New Message"
-            val body = remoteMessage.notification?.body ?: "You have a new message"
-            showNotification(title, body)
+        // Check if message contains a notification payload.
+        remoteMessage.notification?.let {
+            showNotification(it.title, it.body)
         }
     }
 
-    private fun showNotification(title: String, body: String) {
-        val intent = Intent(this, NinthActivity::class.java)
+    private fun showNotification(title: String?, body: String?) {
+        val intent = Intent(this, MainActivity::class.java) // Or any other activity you want to open
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
         val pendingIntent = PendingIntent.getActivity(
             this, 0, intent,
             PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val channelId = "chat_channel"
+        val channelId = "default_channel"
         val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
 
         val notificationBuilder = NotificationCompat.Builder(this, channelId)
@@ -62,43 +43,16 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         val notificationManager =
             getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
+        // Since android Oreo notification channel is needed.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 channelId,
-                "Chat Notifications",
+                "Default Channel",
                 NotificationManager.IMPORTANCE_HIGH
             )
             notificationManager.createNotificationChannel(channel)
         }
 
-        notificationManager.notify(System.currentTimeMillis().toInt(), notificationBuilder.build())
-    }
-
-    override fun onNewToken(token: String) {
-        val sessionManager = SessionManager(this)
-        if (sessionManager.isLoggedIn()) {
-            sendTokenToServer(token)
-        }
-    }
-
-    private fun sendTokenToServer(token: String) {
-        val sessionManager = SessionManager(this)
-        val url = BuildConfig.BASE_URL + "update_fcm_token.php"
-        val rq = Volley.newRequestQueue(this)
-        val req = object : StringRequest(Method.POST, url,
-            { response -> /* Token updated */ },
-            { error -> error.printStackTrace() }) {
-            override fun getParams(): MutableMap<String, String> {
-                val params = HashMap<String, String>()
-                params["fcm_token"] = token
-                return params
-            }
-            override fun getHeaders(): MutableMap<String, String> {
-                val headers = HashMap<String, String>()
-                headers["Authorization"] = "Bearer ${sessionManager.getToken()}"
-                return headers
-            }
-        }
-        rq.add(req)
+        notificationManager.notify(0, notificationBuilder.build())
     }
 }

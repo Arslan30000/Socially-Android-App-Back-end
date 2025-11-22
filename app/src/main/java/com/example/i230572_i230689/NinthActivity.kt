@@ -1,17 +1,20 @@
 ﻿package com.example.i230572_i230689
+import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
-import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.MediaStore
 import android.text.InputType
 import android.util.Base64
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -24,6 +27,10 @@ import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
+import java.io.DataOutputStream
+import java.io.InputStream
+import java.net.HttpURLConnection
+import java.net.URL
 import java.util.UUID
 
 class NinthActivity : AppCompatActivity() {
@@ -39,7 +46,6 @@ class NinthActivity : AppCompatActivity() {
     private val usersMap = mutableMapOf<String, User>()
     private lateinit var otherUserId: String
     private var chatId: String? = null
-    private val PICK_IMAGE_REQUEST = 1001
     private lateinit var sessionManager: SessionManager
     private lateinit var cache: ChatDbHelper
     private var vanishToggleState = false
@@ -51,6 +57,22 @@ class NinthActivity : AppCompatActivity() {
     private var messageRefreshRunnable: Runnable? = null
 
     private lateinit var callListener: ValueEventListener
+
+    private val pickImageLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            result.data?.data?.let { uri ->
+                handleAttachment(uri, "image")
+            }
+        }
+    }
+
+    private val pickVideoLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            result.data?.data?.let { uri ->
+                handleAttachment(uri, "video")
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -91,8 +113,7 @@ class NinthActivity : AppCompatActivity() {
 
         sendButton.setOnClickListener { sendMessage() }
         galleryButton.setOnClickListener { openGallery() }
-
-        videoButton.setOnClickListener { initiateCall("video") }
+        videoButton.setOnClickListener { openVideoGallery() }
         audioButton.setOnClickListener { initiateCall("audio") }
     }
 
@@ -499,65 +520,77 @@ class NinthActivity : AppCompatActivity() {
     }
 
     private fun openGallery() {
-        val i = Intent(Intent.ACTION_PICK)
-        i.type = "image/*"
-        startActivityForResult(i, PICK_IMAGE_REQUEST)
+        val intent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
+        pickImageLauncher.launch(intent)
     }
 
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == PICK_IMAGE_REQUEST && resultCode == RESULT_OK && data != null) {
-            val uri = data.data ?: return
-            val inputStream = contentResolver.openInputStream(uri)
-            val bitmap = BitmapFactory.decodeStream(inputStream)
-            inputStream?.close()
-            val outputStream = ByteArrayOutputStream()
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 70, outputStream)
-            val bytes = outputStream.toByteArray()
-            
-            Thread {
-                try {
-                    val uploadUrl = BuildConfig.BASE_URL + "upload_chat_media.php"
-                    val boundary = "----AndroidUpload${System.currentTimeMillis()}"
-                    val urlObj = java.net.URL(uploadUrl)
-                    val conn = urlObj.openConnection() as java.net.HttpURLConnection
-                    conn.doOutput = true
-                    conn.requestMethod = "POST"
-                    conn.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
-                    conn.setRequestProperty("Authorization", "Bearer ${sessionManager.getToken()}")
-                    val out = java.io.DataOutputStream(conn.outputStream)
-                    val filename = "img_${System.currentTimeMillis()}.jpg"
-                    out.writeBytes("--$boundary\r\n")
-                    out.writeBytes("Content-Disposition: form-data; name=\"file\"; filename=\"$filename\"\r\n")
-                    out.writeBytes("Content-Type: image/jpeg\r\n\r\n")
-                    out.write(bytes)
-                    out.writeBytes("\r\n")
-                    out.writeBytes("--$boundary--\r\n")
-                    out.flush()
-                    out.close()
-                    val respCode = conn.responseCode
-                    val respStream = if (respCode in 200..299) conn.inputStream else conn.errorStream
-                    val respText = respStream.bufferedReader().use { it.readText() }
-                    val json = org.json.JSONObject(respText.trim())
-                    if (json.optBoolean("success", false)) {
-                        val urlPath = json.optString("url", "")
-                        if (urlPath.isNotEmpty()) {
-                            sendMessageWithAttachment(urlPath)
-                        } else {
-                            runOnUiThread { Toast.makeText(this@NinthActivity, "Upload failed: no url", Toast.LENGTH_SHORT).show() }
-                        }
-                    } else {
-                        runOnUiThread { Toast.makeText(this@NinthActivity, json.optString("message", "Upload failed"), Toast.LENGTH_SHORT).show() }
-                    }
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                    runOnUiThread { Toast.makeText(this@NinthActivity, "Upload error", Toast.LENGTH_SHORT).show() }
-                }
-            }.start()
+    private fun openVideoGallery() {
+        val intent = Intent(Intent.ACTION_PICK, MediaStore.Video.Media.EXTERNAL_CONTENT_URI)
+        pickVideoLauncher.launch(intent)
+    }
+
+    private fun handleAttachment(uri: Uri, type: String) {
+        val inputStream = contentResolver.openInputStream(uri)
+        val bytes = inputStream?.readBytes()
+        inputStream?.close()
+
+        if (bytes != null) {
+            uploadAttachment(bytes, type)
         }
     }
 
-    private fun sendMessageWithAttachment(attachmentUrl: String) {
+    private fun uploadAttachment(bytes: ByteArray, type: String) {
+        Thread {
+            try {
+                val uploadUrl = if (type == "image") {
+                    BuildConfig.BASE_URL + "upload_chat_media.php"
+                } else {
+                    BuildConfig.BASE_URL + "upload_video.php"
+                }
+                val boundary = "----AndroidUpload${System.currentTimeMillis()}"
+                val urlObj = URL(uploadUrl)
+                val conn = urlObj.openConnection() as HttpURLConnection
+                conn.doOutput = true
+                conn.requestMethod = "POST"
+                conn.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+                conn.setRequestProperty("Authorization", "Bearer ${sessionManager.getToken()}")
+
+                val out = DataOutputStream(conn.outputStream)
+                val filename = if (type == "image") "img_${System.currentTimeMillis()}.jpg" else "vid_${System.currentTimeMillis()}.mp4"
+                val fileField = if (type == "image") "file" else "video"
+
+                out.writeBytes("--$boundary\r\n")
+                out.writeBytes("Content-Disposition: form-data; name=\"$fileField\"; filename=\"$filename\"\r\n")
+                out.writeBytes("Content-Type: ${if (type == "image") "image/jpeg" else "video/mp4"}\r\n\r\n")
+                out.write(bytes)
+                out.writeBytes("\r\n")
+                out.writeBytes("--$boundary--\r\n")
+                out.flush()
+                out.close()
+
+                val respCode = conn.responseCode
+                val respStream = if (respCode in 200..299) conn.inputStream else conn.errorStream
+                val respText = respStream.bufferedReader().use { it.readText() }
+                val json = JSONObject(respText.trim())
+
+                if (json.optBoolean("success", false)) {
+                    val urlPath = json.optString("url", "")
+                    if (urlPath.isNotEmpty()) {
+                        sendMessageWithAttachment(urlPath, type)
+                    } else {
+                        runOnUiThread { Toast.makeText(this@NinthActivity, "Upload failed: no url", Toast.LENGTH_SHORT).show() }
+                    }
+                } else {
+                    runOnUiThread { Toast.makeText(this@NinthActivity, json.optString("message", "Upload failed"), Toast.LENGTH_SHORT).show() }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                runOnUiThread { Toast.makeText(this@NinthActivity, "Upload error", Toast.LENGTH_SHORT).show() }
+            }
+        }.start()
+    }
+
+    private fun sendMessageWithAttachment(attachmentUrl: String, type: String) {
         if (isSending) return
         isSending = true
         runOnUiThread { sendButton.isEnabled = false }
@@ -568,7 +601,7 @@ class NinthActivity : AppCompatActivity() {
         if (!chatId.isNullOrEmpty() && chatId!!.all { it.isDigit() }) obj.put("conversation_id", chatId!!.toInt())
         obj.put("receiver_id", otherUserId.toInt())
         obj.put("content", "")
-        obj.put("type", "image")
+        obj.put("type", type)
         obj.put("attachment_url", attachmentUrl)
         obj.put("vanish_on_close", if (vanishToggleState) 1 else 0)
         val req = object : StringRequest(Method.POST, url,
@@ -588,7 +621,7 @@ class NinthActivity : AppCompatActivity() {
                                 timestamp = mObj.optLong("created_at", System.currentTimeMillis()),
                                 chatId = mObj.optString("conversation_id", chatId),
                                 attachmentUrl = mObj.optString("attachment_url", ""),
-                                type = mObj.optString("type", "image")
+                                type = mObj.optString("type", type)
                             )
                             if (messages.none { it.messageId == m.messageId }) {
                                 messages.add(m)
@@ -603,7 +636,7 @@ class NinthActivity : AppCompatActivity() {
                             }
                         }
                     } else {
-                        runOnUiThread { Toast.makeText(this@NinthActivity, r.optString("message", "Failed to send image"), Toast.LENGTH_SHORT).show() }
+                        runOnUiThread { Toast.makeText(this@NinthActivity, r.optString("message", "Failed to send attachment"), Toast.LENGTH_SHORT).show() }
                     }
                 } catch (e: Exception) { e.printStackTrace() }
                 finally {

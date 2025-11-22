@@ -60,11 +60,19 @@ if (!$chk || $chk->num_rows === 0) {
     json_response(["success"=>false, "message"=>"Server misconfiguration: posts table missing"]); 
 }
 
+// Log the raw POST data
+error_log("upload_post.php --- Received POST data: " . print_r($_POST, true));
+
 // Accept either a base64 `postImage` payload OR a `postImageUrl` (path returned by upload_media.php)
 $postImage = $_POST['postImage'] ?? '';
 $postImageUrl = $_POST['postImageUrl'] ?? '';
 $caption = $_POST['caption'] ?? '';
 $timestamp = intval($_POST['timestamp'] ?? time() * 1000);
+
+// Log extracted variables
+error_log("upload_post.php --- Caption: $caption, Timestamp: $timestamp");
+error_log("upload_post.php --- PostImage (first 50 chars): " . substr($postImage, 0, 50));
+error_log("upload_post.php --- PostImageUrl: $postImageUrl");
 
 if (empty($postImage) && empty($postImageUrl)) {
     json_response(["success" => false, "message" => "Missing postImage or postImageUrl"]);
@@ -81,6 +89,8 @@ if (!empty($postImageUrl)) {
 // Insert post; `postImage` column stores either a URL/path or base64 string depending on client
 $stmt2 = $conn->prepare("INSERT INTO posts (user_id, caption, postImage, timestamp) VALUES (?, ?, ?, ?)");
 if (!$stmt2) {
+    // Log the database error
+    error_log("upload_post.php --- DB prepare failed (insert): " . $conn->error);
     json_response(["success" => false, "message" => "DB prepare failed (insert)", "error" => $conn->error]);
 }
 
@@ -93,6 +103,8 @@ if ($stmt2->execute()) {
         "post_id" => $conn->insert_id
     ]);
 } else {
+    // Log the database error
+    error_log("upload_post.php --- Failed to upload post: " . $stmt2->error);
     json_response(["success" => false, "message" => "Failed to upload post", "error" => $stmt2->error]);
 }
 ?>

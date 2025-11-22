@@ -1,7 +1,7 @@
 <?php
 require "db.php";
 require "helpers.php";
-require "fcm_helper.php"; // Include our new FCM helper
+require_once "send_notification.php";
 
 // Accept JSON body or form-data
 $raw = file_get_contents('php://input');
@@ -28,13 +28,21 @@ $vanish = isset($data['vanish_on_close']) && $data['vanish_on_close'] ? 1 : 0;
 
 if ($conversation_id <= 0 && $receiver_id <= 0) json_response(["success"=>false,"message"=>"receiver_id or conversation_id required"]);
 
-// ... (rest of your existing validation logic)
-
 // find or create conversation
 $conn->begin_transaction();
 try {
     if ($conversation_id > 0) {
         $conv_id = $conversation_id;
+        // If we only have conversation_id, we need to find the receiver_id for notifications
+        if ($receiver_id <= 0) {
+            $q = $conn->prepare("SELECT user_a, user_b FROM conversations WHERE id = ?");
+            $q->bind_param("i", $conversation_id); $q->execute(); $res = $q->get_result();
+            if ($res->num_rows > 0) {
+                $row = $res->fetch_assoc();
+                $receiver_id = ($row['user_a'] == $user_id) ? $row['user_b'] : $row['user_a'];
+            }
+            $q->close();
+        }
     } else {
         $a = min($user_id, $receiver_id);
         $b = max($user_id, $receiver_id);
@@ -64,26 +72,12 @@ try {
 
     $conn->commit();
 
-    // --- SEND NOTIFICATION ---
-    $fcm_stmt = $conn->prepare("SELECT fcm_token FROM fcm_tokens WHERE user_id = ?");
-    $fcm_stmt->bind_param("i", $receiver_id);
-    $fcm_stmt->execute();
-    $fcm_stmt->bind_result($fcm_token);
-    $fcm_stmt->fetch();
-    $fcm_stmt->close();
-
-    if (!empty($fcm_token)) {
-        $notification_body = ($type === 'image') ? 'Sent you an image.' : $content;
-        $notification_data = [
-            "type" => "new_message",
-            "title" => "New Message from $sender_name",
-            "body" => $notification_body,
-            "sender_id" => (string)$user_id,
-            "conversation_id" => (string)$conv_id
-        ];
-        send_fcm_notification($fcm_token, $notification_data);
+    // Send notification
+    $notification_title = "New message from " . $sender_name;
+    $notification_body = ($type === 'text') ? $content : 'Sent an attachment';
+    if ($receiver_id > 0) {
+        send_notification($receiver_id, $notification_title, $notification_body);
     }
-    // --- END NOTIFICATION ---
 
     $stmtm = $conn->prepare("SELECT * FROM messages WHERE id = ? LIMIT 1");
     $stmtm->bind_param("i", $message_id); $stmtm->execute(); $res = $stmtm->get_result(); $m = $res->fetch_assoc(); $stmtm->close();

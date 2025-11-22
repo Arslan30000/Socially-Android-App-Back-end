@@ -33,6 +33,25 @@
             android:scaleType="fitCenter"
             android:visibility="gone" />
 
+        <FrameLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content">
+
+            <VideoView
+                android:id="@+id/video_message"
+                android:layout_width="240dp"
+                android:layout_height="240dp"
+                android:visibility="gone" />
+
+            <ImageView
+                android:id="@+id/play_icon"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:src="@drawable/ic_play_arrow"
+                android:layout_gravity="center"
+                android.visibility="gone" />
+        </FrameLayout>
+
     </FrameLayout>
 
 </LinearLayout>

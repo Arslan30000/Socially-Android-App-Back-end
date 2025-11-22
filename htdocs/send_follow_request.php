@@ -1,7 +1,7 @@
 <?php
 require "db.php";
 require "helpers.php";
-require "fcm_helper.php"; // Include our new FCM helper
+require_once "send_notification.php";
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_response(["success"=>false,"message"=>"Use POST"]);
 
@@ -27,24 +27,10 @@ if ($to_user_id <= 0) json_response(["success"=>false,"message"=>"Missing to_use
 $stmt2 = $conn->prepare("INSERT INTO follow_requests (from_user_id, to_user_id, created_at) VALUES (?, ?, NOW())");
 $stmt2->bind_param("ii", $from_user_id, $to_user_id);
 if ($stmt2->execute()) {
-    // --- SEND NOTIFICATION ---
-    $fcm_stmt = $conn->prepare("SELECT fcm_token FROM fcm_tokens WHERE user_id = ?");
-    $fcm_stmt->bind_param("i", $to_user_id);
-    $fcm_stmt->execute();
-    $fcm_stmt->bind_result($fcm_token);
-    $fcm_stmt->fetch();
-    $fcm_stmt->close();
-
-    if (!empty($fcm_token)) {
-        $notification_data = [
-            "type" => "follow_request",
-            "title" => "New Follow Request",
-            "body" => "$from_user_name wants to follow you.",
-            "from_user_id" => (string)$from_user_id
-        ];
-        send_fcm_notification($fcm_token, $notification_data);
-    }
-    // --- END NOTIFICATION ---
+    // Send notification
+    $notification_title = "New Follow Request";
+    $notification_body = $from_user_name . " wants to follow you.";
+    send_notification($to_user_id, $notification_title, $notification_body);
 
     json_response(["success"=>true,"message"=>"Request sent"]);
 } else {
