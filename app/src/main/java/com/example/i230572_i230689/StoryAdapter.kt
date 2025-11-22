@@ -1,16 +1,15 @@
 package com.example.i230572_i230689
 
 import android.content.Context
-import android.content.Intent
-import android.graphics.BitmapFactory
-import android.util.Base64
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
+import com.squareup.picasso.Picasso
 import de.hdodenhof.circleimageview.CircleImageView
+import java.io.File
 
 class StoryAdapter(
     private val context: Context,
@@ -39,14 +38,9 @@ class StoryAdapter(
             holder.addStoryPlusIcon.visibility = View.GONE
         }
 
-        if (!story.userProfilePicture.isNullOrEmpty()) {
-            try {
-                val imageBytes = Base64.decode(story.userProfilePicture, Base64.DEFAULT)
-                val bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
-                holder.userImage.setImageBitmap(bitmap)
-            } catch (e: Exception) {
-                holder.userImage.setImageResource(R.drawable.profile_image)
-            }
+        // Corrected: Load images from file paths using Picasso
+        if (story.userProfilePicture?.isNotEmpty() == true) {
+            Picasso.get().load(File(story.userProfilePicture)).placeholder(R.drawable.profile_image).into(holder.userImage)
         } else {
             holder.userImage.setImageResource(R.drawable.profile_image)
         }

@@ -1,6 +1,8 @@
 package com.example.i230572_i230689
 
-import android.graphics.BitmapFactory
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Bundle
 import android.util.Base64
 import android.util.Log
@@ -12,40 +14,37 @@ import androidx.appcompat.app.AppCompatActivity
 import com.android.volley.DefaultRetryPolicy
 import com.android.volley.toolbox.StringRequest
 import com.android.volley.toolbox.Volley
+import com.squareup.picasso.Picasso
 import de.hdodenhof.circleimageview.CircleImageView
 import org.json.JSONObject
+import java.io.File
+import java.io.FileOutputStream
 
 class NineteenActivity : AppCompatActivity() {
 
-    // Views
     private lateinit var storyImageView: ImageView
     private lateinit var userProfileImageView: CircleImageView
     private lateinit var usernameTextView: TextView
 
-    // Data and State
     private val storiesList = mutableListOf<Story>()
     private var currentStoryIndex = 0
     private lateinit var sessionManager: SessionManager
+    private lateinit var dbHelper: LocalDbHelper
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.my_story)
 
         sessionManager = SessionManager(this)
+        dbHelper = LocalDbHelper(this)
 
-        // Initialize Views
         storyImageView = findViewById(R.id.main_image)
         userProfileImageView = findViewById(R.id.pfp_image)
         usernameTextView = findViewById(R.id.story_name)
 
-        // Set up tap listeners for navigation
-        val reverseView: View = findViewById(R.id.reverse_view)
-        reverseView.setOnClickListener { showPreviousStory() }
+        findViewById<View>(R.id.reverse_view).setOnClickListener { showPreviousStory() }
+        findViewById<View>(R.id.skip_view).setOnClickListener { showNextStory() }
 
-        val skipView: View = findViewById(R.id.skip_view)
-        skipView.setOnClickListener { showNextStory() }
-
-        // Get User ID and fetch stories
         val userId = intent.getStringExtra("USER_ID")
         if (userId.isNullOrEmpty()) {
             Toast.makeText(this, "User ID not found", Toast.LENGTH_SHORT).show()
@@ -53,11 +52,39 @@ class NineteenActivity : AppCompatActivity() {
             return
         }
 
-        fetchUserStories(userId)
+        loadStories(userId)
     }
 
-    private fun fetchUserStories(userId: String) {
-        val token = sessionManager.getToken() ?: run { Toast.makeText(this, "Not logged in", Toast.LENGTH_SHORT).show(); finish(); return }
+    private fun isOnline(): Boolean {
+        val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val network = connectivityManager.activeNetwork ?: return false
+        val activeNetwork = connectivityManager.getNetworkCapabilities(network) ?: return false
+        return when {
+            activeNetwork.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> true
+            activeNetwork.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> true
+            else -> false
+        }
+    }
+
+    private fun loadStories(userId: String) {
+        val cachedStories = dbHelper.getStories().filter { it.userId == userId }
+        if (cachedStories.isNotEmpty()) {
+            storiesList.clear()
+            storiesList.addAll(cachedStories)
+            displayStory(0)
+            Log.d("NineteenActivity", "Loaded ${cachedStories.size} stories from cache.")
+        }
+
+        if (isOnline()) {
+            fetchUserStoriesFromNetwork(userId)
+        } else if (cachedStories.isEmpty()) {
+            Toast.makeText(this, "You are offline and no stories are cached.", Toast.LENGTH_LONG).show()
+            finish()
+        }
+    }
+
+    private fun fetchUserStoriesFromNetwork(userId: String) {
+        val token = sessionManager.getToken() ?: return
         val url = BuildConfig.BASE_URL + "get_stories.php?user_id=$userId"
         val rq = Volley.newRequestQueue(this)
 
@@ -67,70 +94,70 @@ class NineteenActivity : AppCompatActivity() {
                     val obj = JSONObject(response.trim())
                     if (obj.optBoolean("success", false)) {
                         val storiesArray = obj.optJSONArray("stories")
-                        storiesList.clear()
+                        val networkStories = mutableListOf<Story>()
                         if (storiesArray != null) {
                             for (i in 0 until storiesArray.length()) {
                                 val storyObj = storiesArray.getJSONObject(i)
-                                val story = Story(
-                                    userId = storyObj.optInt("userId", 0).toString(),
+                                val storyId = storyObj.optString("id")
+                                val storyImageBase64 = storyObj.optString("storyImage", "")
+                                val userPfpBase64 = storyObj.optString("userProfilePicture", "")
+
+                                networkStories.add(Story(
+                                    storyId = storyId,
+                                    userId = storyObj.optString("userId"),
                                     username = storyObj.optString("username", "Unknown"),
-                                    storyImage = storyObj.optString("storyImage", ""),
-                                    userProfilePicture = storyObj.optString("userProfilePicture", ""),
-                                    isAddButton = false
-                                )
-                                storiesList.add(story)
+                                    storyImage = saveImageToLocalCache(storyImageBase64, "story_$storyId"),
+                                    userProfilePicture = saveImageToLocalCache(userPfpBase64, "pfp_$userId"),
+                                    timestamp = storyObj.optLong("timestamp", 0L)
+                                ))
                             }
                         }
 
-                        if (storiesList.isNotEmpty()) {
+                        if (networkStories.isNotEmpty()) {
+                            storiesList.clear()
+                            storiesList.addAll(networkStories)
                             currentStoryIndex = 0
                             displayStory(currentStoryIndex)
+                            dbHelper.upsertStories(networkStories)
                         } else {
-                            Toast.makeText(this@NineteenActivity, "No stories found.", Toast.LENGTH_SHORT).show()
-                            finish()
+                            if (storiesList.isEmpty()) { // Only show if no cached stories were shown
+                                Toast.makeText(this@NineteenActivity, "No stories found.", Toast.LENGTH_SHORT).show()
+                                finish()
+                            }
                         }
-                    } else {
-                        Toast.makeText(this@NineteenActivity, "No stories found for this user.", Toast.LENGTH_SHORT).show()
-                        finish()
                     }
                 } catch (e: Exception) {
                     e.printStackTrace()
-                    Toast.makeText(this@NineteenActivity, "Error parsing stories", Toast.LENGTH_SHORT).show()
-                    finish()
                 }
             },
             { error ->
-                Toast.makeText(this@NineteenActivity, "Failed to load stories.", Toast.LENGTH_SHORT).show()
-                finish()
+                Log.e("NineteenActivity", "Network error: ${error.message}")
             }) {
             override fun getHeaders(): MutableMap<String, String> {
-                val headers = HashMap<String, String>()
-                headers["Authorization"] = "Bearer $token"
-                return headers
+                return mutableMapOf("Authorization" to "Bearer $token")
             }
         }
-
         req.retryPolicy = DefaultRetryPolicy(15000, DefaultRetryPolicy.DEFAULT_MAX_RETRIES, DefaultRetryPolicy.DEFAULT_BACKOFF_MULT)
         rq.add(req)
     }
 
-    /**
-     * Displays the story at the given index in the storiesList.
-     */
     private fun displayStory(index: Int) {
-        if (index < 0 || index >= storiesList.size) return // Safety check
+        if (index < 0 || index >= storiesList.size) return
 
         val story = storiesList[index]
-
-        // Update the UI elements
         usernameTextView.text = story.username
-        decodeAndSetImage(story.userProfilePicture, userProfileImageView, R.drawable.profile_image)
-        decodeAndSetImage(story.storyImage, storyImageView) // This is the main changing image
+
+        if (story.userProfilePicture?.isNotEmpty() == true) {
+            Picasso.get().load(File(story.userProfilePicture)).placeholder(R.drawable.profile_image).into(userProfileImageView)
+        } else {
+            userProfileImageView.setImageResource(R.drawable.profile_image)
+        }
+
+        if (story.storyImage.isNotEmpty()) {
+            Picasso.get().load(File(story.storyImage)).into(storyImageView)
+        }
     }
 
-    /**
-     * Called when the left side of the screen is tapped.
-     */
     private fun showPreviousStory() {
         if (currentStoryIndex > 0) {
             currentStoryIndex--
@@ -138,9 +165,6 @@ class NineteenActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Called when the right side of the screen is tapped.
-     */
     private fun showNextStory() {
         if (currentStoryIndex < storiesList.size - 1) {
             currentStoryIndex++
@@ -149,19 +173,19 @@ class NineteenActivity : AppCompatActivity() {
             finish()
         }
     }
-
-    private fun decodeAndSetImage(base64String: String?, imageView: ImageView, fallbackDrawable: Int? = null) {
-        if (base64String.isNullOrEmpty()) {
-            if (fallbackDrawable != null) imageView.setImageResource(fallbackDrawable)
-            return
-        }
-        try {
+    
+    private fun saveImageToLocalCache(base64String: String, fileName: String): String {
+        if (base64String.isEmpty()) return ""
+        return try {
             val imageBytes = Base64.decode(base64String, Base64.DEFAULT)
-            val bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
-            imageView.setImageBitmap(bitmap)
+            val file = File(filesDir, "$fileName.jpg")
+            FileOutputStream(file).use {
+                it.write(imageBytes)
+            }
+            file.absolutePath
         } catch (e: Exception) {
-            Log.e("ImageDecodeError", "Failed to decode Base64 string: ", e)
-            if (fallbackDrawable != null) imageView.setImageResource(fallbackDrawable)
+            Log.e("ImageCache", "Failed to save image $fileName: ${e.message}")
+            ""
         }
     }
 }

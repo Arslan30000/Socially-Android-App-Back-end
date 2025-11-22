@@ -37,7 +37,8 @@
             android:layout_width="60dp"
             android:layout_height="60dp"
             android:layout_marginHorizontal="15dp"
-            android:contentDescription="Mute" />
+            android:contentDescription="Mute"
+                android:background="@drawable/music"/>
 
         <!-- End Call Button -->
         <ImageButton
@@ -45,8 +46,8 @@
             android:layout_width="70dp"
             android:layout_height="70dp"
             android:layout_marginHorizontal="15dp"
-            android:background="@android:color/holo_red_dark"
-            android:contentDescription="End Call" />
+            android:contentDescription="End Call"
+                android:background="@drawable/ic_decline_call"/>
 
         <!-- Switch Camera Button -->
         <ImageButton
@@ -54,7 +55,9 @@
             android:layout_width="60dp"
             android:layout_height="60dp"
             android:layout_marginHorizontal="15dp"
-            android:contentDescription="Switch Camera" />
+            android:contentDescription="Switch Camere"
+                android:background="@drawable/camera"/>
+
             
         <!-- Disable Video Button -->
         <ImageButton
@@ -62,7 +65,8 @@
             android:layout_width="60dp"
             android:layout_height="60dp"
             android:layout_marginHorizontal="15dp"
-            android:contentDescription="Disable Video" />
+            android:contentDescription="Disable Video"
+                android:background="@drawable/info"/>
 
     </LinearLayout>
 

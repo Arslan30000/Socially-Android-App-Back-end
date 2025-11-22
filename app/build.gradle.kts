@@ -58,9 +58,7 @@ dependencies {
     implementation("com.android.volley:volley:1.2.1")
     implementation("io.agora.rtc:full-sdk:4.2.6")
 
+    implementation("com.squareup.picasso:picasso:2.8")
 
-
-
-
-
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
 }

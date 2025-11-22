@@ -1,8 +1,7 @@
 package com.example.i230572_i230689
 
 import android.content.Context
-import android.graphics.BitmapFactory
-import android.util.Base64
+import android.content.Intent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -11,10 +10,9 @@ import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.android.volley.toolbox.StringRequest
 import com.android.volley.toolbox.Volley
-// Firebase removed - we use REST endpoints for like/comment
-import android.app.AlertDialog
-import android.widget.EditText
+import com.squareup.picasso.Picasso
 import de.hdodenhof.circleimageview.CircleImageView
+import java.io.File
 
 class PostAdapter(
     private val context: Context,
@@ -42,113 +40,68 @@ class PostAdapter(
         val post = posts[position]
 
         holder.username.text = post.username
-            holder.caption.text = post.caption
-            holder.likesCount.text = "${post.likesCount} likes"
-            holder.commentsCount.text = "${post.commentsCount} comments"
+        holder.caption.text = post.caption
+        holder.likesCount.text = "${post.likesCount} likes"
+        holder.commentsCount.text = "${post.commentsCount} comments"
 
-        // Set initial like icon based on isLiked
-        if (post.isLiked) {
-            holder.likeButton.setImageResource(R.drawable.like_fillled)
-            holder.likeButton.isEnabled = true
+        // Corrected: Load images from file paths using Picasso
+        if (post.userProfileImage.isNotEmpty()) {
+            Picasso.get().load(File(post.userProfileImage)).placeholder(R.drawable.profile_image).into(holder.userPfp)
         } else {
-            holder.likeButton.setImageResource(R.drawable.like)
-            holder.likeButton.isEnabled = true
+            holder.userPfp.setImageResource(R.drawable.profile_image)
         }
 
-        setImageFromBase64(post.userProfileImage, holder.userPfp, R.drawable.profile_image)
-        setImageFromBase64(post.postImage, holder.postImage, R.drawable.socially_logo)
+        if (post.postImage.isNotEmpty()) {
+            Picasso.get().load(File(post.postImage)).placeholder(R.drawable.socially_logo).into(holder.postImage)
+        } else {
+            holder.postImage.setImageResource(R.drawable.socially_logo)
+        }
+
+        holder.likeButton.setImageResource(if (post.isLiked) R.drawable.like_fillled else R.drawable.like)
 
         holder.likeButton.setOnClickListener {
-            val token = SessionManager(context).getToken() ?: return@setOnClickListener
-            val urlLike = BuildConfig.BASE_URL + "like_post.php"
-            val urlUnlike = BuildConfig.BASE_URL + "unlike_post.php"
-            val rq = Volley.newRequestQueue(context)
-
-            if (post.isLiked) {
-                // Send unlike request
-                val req = object: StringRequest(Method.POST, urlUnlike,
-                    { response ->
-                        try {
-                            val obj = org.json.JSONObject(response.trim())
-                            if (obj.optBoolean("success", false)) {
-                                val newCnt = obj.optInt("likesCount", post.likesCount)
-                                post.likesCount = newCnt
-                                post.isLiked = false
-                                holder.likesCount.text = "$newCnt likes"
-                                holder.likeButton.setImageResource(R.drawable.like)
-                            }
-                        } catch (e: Exception) {
-                            // ignore
-                        }
-                    },
-                    { error -> /* ignore */ }) {
-                    override fun getParams(): MutableMap<String, String> {
-                        return hashMapOf("post_id" to post.postId)
-                    }
-
-                    override fun getHeaders(): MutableMap<String, String> {
-                        val headers = HashMap<String, String>()
-                        headers["Authorization"] = "Bearer $token"
-                        return headers
-                    }
-                }
-                rq.add(req)
-            } else {
-                // Send like request
-                val req = object: StringRequest(Method.POST, urlLike,
-                    { response ->
-                        try {
-                            val obj = org.json.JSONObject(response.trim())
-                            if (obj.optBoolean("success", false)) {
-                                val newCnt = obj.optInt("likesCount", post.likesCount + 1)
-                                post.likesCount = newCnt
-                                post.isLiked = true
-                                holder.likesCount.text = "$newCnt likes"
-                                holder.likeButton.setImageResource(R.drawable.like_fillled)
-                            }
-                        } catch (e: Exception) {
-                            // ignore
-                        }
-                    },
-                    { error -> /* ignore */ }) {
-                    override fun getParams(): MutableMap<String, String> {
-                        return hashMapOf("post_id" to post.postId)
-                    }
-
-                    override fun getHeaders(): MutableMap<String, String> {
-                        val headers = HashMap<String, String>()
-                        headers["Authorization"] = "Bearer $token"
-                        return headers
-                    }
-                }
-                rq.add(req)
-            }
+            toggleLike(post, holder)
         }
 
-        // Comment button: show a dialog to add a comment
         holder.itemView.findViewById<ImageView>(R.id.post_comment_button).setOnClickListener {
-            val ctx = context
-            val intent = android.content.Intent(ctx, CommentsActivity::class.java)
+            val intent = Intent(context, CommentsActivity::class.java)
             intent.putExtra("POST_ID", post.postId)
-            ctx.startActivity(intent)
+            context.startActivity(intent)
         }
     }
 
-    private fun setImageFromBase64(
-        base64String: String,
-        imageView: ImageView,
-        fallbackDrawable: Int
-    ) {
-        if (base64String.isNotEmpty()) {
-            try {
-                val imageBytes = Base64.decode(base64String, Base64.DEFAULT)
-                val bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
-                imageView.setImageBitmap(bitmap)
-            } catch (e: Exception) {
-                imageView.setImageResource(fallbackDrawable)
-            }
+    private fun toggleLike(post: Post, holder: PostViewHolder) {
+        val token = SessionManager(context).getToken() ?: return
+        val url = if (post.isLiked) {
+            BuildConfig.BASE_URL + "unlike_post.php"
         } else {
-            imageView.setImageResource(fallbackDrawable)
+            BuildConfig.BASE_URL + "like_post.php"
         }
+        val rq = Volley.newRequestQueue(context)
+
+        val req = object : StringRequest(Method.POST, url,
+            { response ->
+                try {
+                    val obj = org.json.JSONObject(response.trim())
+                    if (obj.optBoolean("success", false)) {
+                        post.isLiked = !post.isLiked
+                        post.likesCount = obj.optInt("likesCount", post.likesCount)
+                        holder.likesCount.text = "${post.likesCount} likes"
+                        holder.likeButton.setImageResource(if (post.isLiked) R.drawable.like_fillled else R.drawable.like)
+                    }
+                } catch (e: Exception) {
+                    // Ignore parse error
+                }
+            },
+            { error -> /* Ignore network error for now */ }) {
+            override fun getParams(): MutableMap<String, String> {
+                return hashMapOf("post_id" to post.postId)
+            }
+
+            override fun getHeaders(): MutableMap<String, String> {
+                return mutableMapOf("Authorization" to "Bearer $token")
+            }
+        }
+        rq.add(req)
     }
 }

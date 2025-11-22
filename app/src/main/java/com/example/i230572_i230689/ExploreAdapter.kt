@@ -1,13 +1,13 @@
 package com.example.i230572_i230689
 
 import android.content.Context
-import android.graphics.BitmapFactory
-import android.util.Base64
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import androidx.recyclerview.widget.RecyclerView
+import com.squareup.picasso.Picasso
+import java.io.File
 
 class ExploreAdapter(
     private val context: Context,
@@ -26,14 +26,10 @@ class ExploreAdapter(
 
     override fun onBindViewHolder(holder: VH, position: Int) {
         val p = posts[position]
+        
+        // Corrected: Load images from file paths using Picasso
         if (p.postImage.isNotEmpty()) {
-            try {
-                val bytes = Base64.decode(p.postImage, Base64.DEFAULT)
-                val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                holder.image.setImageBitmap(bmp)
-            } catch (e: Exception) {
-                holder.image.setImageResource(R.drawable.socially_logo)
-            }
+            Picasso.get().load(File(p.postImage)).placeholder(R.drawable.socially_logo).into(holder.image)
         } else {
             holder.image.setImageResource(R.drawable.socially_logo)
         }

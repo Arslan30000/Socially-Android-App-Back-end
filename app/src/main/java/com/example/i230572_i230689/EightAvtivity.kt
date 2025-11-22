@@ -1,10 +1,16 @@
 package com.example.i230572_i230689
 
+import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
+import android.util.Base64
+import android.util.Log
 import android.widget.EditText
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -12,12 +18,15 @@ import com.android.volley.DefaultRetryPolicy
 import com.android.volley.toolbox.StringRequest
 import com.android.volley.toolbox.Volley
 import org.json.JSONObject
+import java.io.File
+import java.io.FileOutputStream
 
 class EightActivity : AppCompatActivity() {
 
     private lateinit var recyclerView: RecyclerView
     private lateinit var adapter: ChatsAdapter
     private lateinit var sessionManager: SessionManager
+    private lateinit var dbHelper: LocalDbHelper
 
     private val chats = mutableListOf<Chat>()
     private val usersMap = mutableMapOf<String, User>()
@@ -33,6 +42,7 @@ class EightActivity : AppCompatActivity() {
         setContentView(R.layout.chat)
 
         sessionManager = SessionManager(this)
+        dbHelper = LocalDbHelper(this)
 
         recyclerView = findViewById(R.id.chats_recycler_view)
         recyclerView.layoutManager = LinearLayoutManager(this)
@@ -54,7 +64,6 @@ class EightActivity : AppCompatActivity() {
             }
         )
         recyclerView.adapter = adapter
-        // setup horizontal online followers bar
         val onlineRv = findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.online_recycler_view)
         onlineRv.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(this, androidx.recyclerview.widget.LinearLayoutManager.HORIZONTAL, false)
         onlineRv.adapter = OnlineUserAdapter(mutableListOf()) { user ->
@@ -64,28 +73,160 @@ class EightActivity : AppCompatActivity() {
             startActivity(intent)
         }
 
-        loadChats()
-        loadOnlineFollowers()
+        loadData()
         setupSearch()
-        startStatusRefresh()
     }
 
     override fun onResume() {
         super.onResume()
-        setStatus("online")
-        startStatusRefresh()
-        loadChats()
+        if (isOnline()) {
+            setStatus("online")
+            startStatusRefresh()
+            loadData()
+        }
     }
 
     override fun onPause() {
         super.onPause()
         stopStatusRefresh()
-        setStatus("offline")
+        if (isOnline()) {
+            setStatus("offline")
+        }
     }
     
     override fun onDestroy() {
         super.onDestroy()
         stopStatusRefresh()
+    }
+
+    private fun isOnline(): Boolean {
+        val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val network = connectivityManager.activeNetwork ?: return false
+        val activeNetwork = connectivityManager.getNetworkCapabilities(network) ?: return false
+        return when {
+            activeNetwork.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> true
+            activeNetwork.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> true
+            else -> false
+        }
+    }
+
+    private fun loadData() {
+        loadChatsFromCache()
+        if (isOnline()) {
+            loadChatsFromNetwork()
+            loadOnlineFollowers()
+        } else {
+            Toast.makeText(this, "You are offline. Showing cached chats.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun loadChatsFromCache() {
+        val cachedData = dbHelper.getConversationsWithUsers()
+        if (cachedData.isNotEmpty()) {
+            val cachedChats = cachedData.map { it.first }
+            val cachedUsers = cachedData.map { it.second }.associateBy { it.uid }
+            
+            chats.clear()
+            chats.addAll(cachedChats)
+            usersMap.clear()
+            usersMap.putAll(cachedUsers)
+            
+            updateAdapterSorted(cachedChats)
+            Log.d("EightActivity", "Loaded ${cachedChats.size} chats from cache.")
+        }
+    }
+
+    private fun loadChatsFromNetwork() {
+        val token = sessionManager.getToken() ?: return
+        val url = BuildConfig.BASE_URL + "get_recent_chats.php"
+        val rq = Volley.newRequestQueue(this)
+        val req = object : StringRequest(Method.GET, url,
+            { response ->
+                try {
+                    val obj = JSONObject(response.trim())
+                    if (obj.optBoolean("success", false)) {
+                        val arr = obj.optJSONArray("conversations")
+                        val networkData = mutableListOf<Pair<Chat, User>>()
+                        val networkMessages = mutableMapOf<String, Message>()
+
+                        if (arr != null) {
+                            for (i in 0 until arr.length()) {
+                                val it = arr.getJSONObject(i)
+                                val convId = it.optInt("conversationId", -1)
+                                val otherId = it.optInt("userId", -1)
+                                val username = it.optString("username", "")
+                                val profileBase64 = it.optString("profileImage", "")
+                                val lastMsg = it.optString("lastMessage", "")
+                                val lastMsgId = it.optInt("lastMessageId", -1)
+                                val lastAt = it.optString("lastMessageAt", "")
+
+                                if (convId == -1 || otherId == -1) continue
+
+                                val lastMillis = parseMySqlDatetimeToMillis(lastAt)
+                                val profileImagePath = saveImageToLocalCache(profileBase64, "pfp_$otherId")
+
+                                val chat = Chat(chatId = convId.toString(), participants = mapOf(sessionManager.getUserId().toString() to true, otherId.toString() to true), lastMessage = lastMsg, lastMessageTime = lastMillis)
+                                val user = User(uid = otherId.toString(), username = username, imageBase64 = profileImagePath)
+                                networkData.add(Pair(chat, user))
+
+                                if (lastMsgId != -1 && lastMsg.isNotEmpty()) {
+                                    val m = Message(
+                                        messageId = lastMsgId.toString(), 
+                                        senderId = it.optInt("lastSenderId", -1).toString(), 
+                                        receiverId = sessionManager.getUserId().toString(), 
+                                        text = lastMsg, 
+                                        timestamp = lastMillis,
+                                        chatId = convId.toString(),
+                                        type = it.optString("lastMessageType", "text"),
+                                        isSeen = it.optInt("lastMessageSeen", 0) == 1
+                                    )
+                                    networkMessages[lastMsgId.toString()] = m
+                                }
+                            }
+                        }
+                        
+                        val networkChats = networkData.map { it.first }
+                        val networkUsers = networkData.map { it.second }.associateBy { it.uid }
+
+                        chats.clear()
+                        chats.addAll(networkChats)
+                        usersMap.clear()
+                        usersMap.putAll(networkUsers)
+                        messagesMap.clear()
+                        messagesMap.putAll(networkMessages)
+
+                        updateAdapterSorted(networkChats)
+                        dbHelper.upsertConversations(networkData)
+                        
+                        val userIds = usersMap.keys.toList()
+                        if (userIds.isNotEmpty()) {
+                            fetchOnlineStatusesForChats(userIds)
+                        }
+                    }
+                } catch (e: Exception) { e.printStackTrace() }
+            },
+            { error -> error.printStackTrace() }) {
+            override fun getHeaders(): MutableMap<String, String> {
+                return mutableMapOf("Authorization" to "Bearer $token")
+            }
+        }
+        req.retryPolicy = DefaultRetryPolicy(15000, DefaultRetryPolicy.DEFAULT_MAX_RETRIES, DefaultRetryPolicy.DEFAULT_BACKOFF_MULT)
+        rq.add(req)
+    }
+    
+    private fun saveImageToLocalCache(base64String: String, fileName: String): String {
+        if (base64String.isEmpty()) return ""
+        return try {
+            val imageBytes = Base64.decode(base64String, Base64.DEFAULT)
+            val file = File(filesDir, "$fileName.jpg")
+            FileOutputStream(file).use {
+                it.write(imageBytes)
+            }
+            file.absolutePath
+        } catch (e: Exception) {
+            Log.e("ImageCache", "Failed to save image $fileName: ${e.message}")
+            ""
+        }
     }
     
     private fun startStatusRefresh() {
@@ -94,20 +235,20 @@ class EightActivity : AppCompatActivity() {
         }
         stopStatusRefresh()
         statusRefreshRunnable = Runnable {
-            val userIds = usersMap.keys.toList()
-            if (userIds.isNotEmpty()) {
-                fetchOnlineStatusesForChats(userIds)
+            if (isOnline()) {
+                val userIds = usersMap.keys.toList()
+                if (userIds.isNotEmpty()) {
+                    fetchOnlineStatusesForChats(userIds)
+                }
+                loadOnlineFollowers()
             }
-            loadOnlineFollowers()
             statusRefreshHandler?.postDelayed(statusRefreshRunnable!!, 5000)
         }
         statusRefreshHandler?.post(statusRefreshRunnable!!)
     }
     
     private fun stopStatusRefresh() {
-        if (statusRefreshHandler != null && statusRefreshRunnable != null) {
-            statusRefreshHandler?.removeCallbacks(statusRefreshRunnable!!)
-        }
+        statusRefreshRunnable?.let { statusRefreshHandler?.removeCallbacks(it) }
     }
 
     private fun setStatus(status: String) {
@@ -124,79 +265,10 @@ class EightActivity : AppCompatActivity() {
             }
             override fun getBodyContentType(): String = "application/json"
             override fun getHeaders(): MutableMap<String, String> {
-                val h = HashMap<String, String>()
-                h["Authorization"] = "Bearer ${sessionManager.getToken()}"
-                return h
+                return mutableMapOf("Authorization" to "Bearer ${sessionManager.getToken()}")
             }
         }
         req.retryPolicy = DefaultRetryPolicy(8000, DefaultRetryPolicy.DEFAULT_MAX_RETRIES, DefaultRetryPolicy.DEFAULT_BACKOFF_MULT)
-        rq.add(req)
-    }
-
-    private fun loadChats() {
-        val token = sessionManager.getToken() ?: run { return }
-        val url = BuildConfig.BASE_URL + "get_recent_chats.php"
-        val rq = Volley.newRequestQueue(this)
-        val req = object : StringRequest(Method.GET, url,
-            { response ->
-                try {
-                    val obj = JSONObject(response.trim())
-                    if (obj.optBoolean("success", false)) {
-                        val arr = obj.optJSONArray("conversations")
-                        chats.clear(); usersMap.clear(); messagesMap.clear()
-                        val list = mutableListOf<Chat>()
-                        if (arr != null) {
-                            for (i in 0 until arr.length()) {
-                                val it = arr.getJSONObject(i)
-                                val convId = it.optInt("conversationId", -1)
-                                val otherId = it.optInt("userId", -1)
-                                val username = it.optString("username", "")
-                                val profile = it.optString("profileImage", "")
-                                val lastMsg = it.optString("lastMessage", "")
-                                val lastMsgId = it.optInt("lastMessageId", -1)
-                                val lastAt = it.optString("lastMessageAt", "")
-
-                                if (convId == -1 || otherId == -1) continue
-
-                                val lastMillis = parseMySqlDatetimeToMillis(lastAt)
-
-                                val chat = Chat(chatId = convId.toString(), participants = mapOf(sessionManager.getUserId().toString() to true, otherId.toString() to true), lastMessage = lastMsg, lastMessageTime = lastMillis)
-                                list.add(chat)
-
-                                val u = User(uid = otherId.toString(), username = username, imageBase64 = profile)
-                                usersMap[otherId.toString()] = u
-
-                                if (lastMsgId != -1 && lastMsg.isNotEmpty()) {
-                                    val m = Message(
-                                        messageId = lastMsgId.toString(), 
-                                        senderId = it.optInt("lastSenderId", -1).toString(), 
-                                        receiverId = sessionManager.getUserId().toString(), 
-                                        text = lastMsg, 
-                                        timestamp = lastMillis,
-                                        chatId = convId.toString(),
-                                        type = it.optString("lastMessageType", "text"),
-                                        isSeen = it.optInt("lastMessageSeen", 0) == 1
-                                    )
-                                    messagesMap[lastMsgId.toString()] = m
-                                }
-                            }
-                        }
-                        updateAdapterSorted(list)
-                        val userIds = usersMap.keys.toList()
-                        if (userIds.isNotEmpty()) {
-                            fetchOnlineStatusesForChats(userIds)
-                        }
-                    }
-                } catch (e: Exception) { e.printStackTrace() }
-            },
-            { error -> error.printStackTrace() }) {
-            override fun getHeaders(): MutableMap<String, String> {
-                val headers = HashMap<String, String>()
-                headers["Authorization"] = "Bearer ${sessionManager.getToken()}"
-                return headers
-            }
-        }
-        req.retryPolicy = DefaultRetryPolicy(15000, DefaultRetryPolicy.DEFAULT_MAX_RETRIES, DefaultRetryPolicy.DEFAULT_BACKOFF_MULT)
         rq.add(req)
     }
     
@@ -227,9 +299,7 @@ class EightActivity : AppCompatActivity() {
             },
             { error -> error.printStackTrace() }) {
             override fun getHeaders(): MutableMap<String, String> {
-                val headers = HashMap<String, String>()
-                headers["Authorization"] = "Bearer $token"
-                return headers
+                return mutableMapOf("Authorization" to "Bearer $token")
             }
         }
         rq.add(req)
@@ -273,9 +343,8 @@ class EightActivity : AppCompatActivity() {
             },
             { error -> error.printStackTrace() }) {
             override fun getHeaders(): MutableMap<String, String> {
-                val headers = HashMap<String, String>()
-                headers["Authorization"] = "Bearer ${sessionManager.getToken()}"
-                return headers
+                return mutableMapOf("Authorization" to "Bearer ${sessionManager.getToken()}"
+                )
             }
         }
         rq.add(req)
@@ -314,9 +383,7 @@ class EightActivity : AppCompatActivity() {
                 } catch (e: Exception) { e.printStackTrace() }
             }, { e -> e.printStackTrace() }) {
             override fun getHeaders(): MutableMap<String, String> {
-                val headers = HashMap<String, String>()
-                headers["Authorization"] = "Bearer $token"
-                return headers
+                return mutableMapOf("Authorization" to "Bearer $token")
             }
         }
         rq2.add(req2)
@@ -360,7 +427,7 @@ class EightActivity : AppCompatActivity() {
                     if (obj.optBoolean("success", false)) {
                         val arr = obj.optJSONArray("users")
                         if (arr != null && arr.length() > 0) {
-                            val it = arr.getJSONObject(0) // Take only the first result
+                            val it = arr.getJSONObject(0)
                             val uid = it.optInt("id", -1)
                             if (uid != -1) {
                                 val user = User(uid = uid.toString(), username = it.optString("username", ""), imageBase64 = it.optString("profileImage", ""))
@@ -374,9 +441,7 @@ class EightActivity : AppCompatActivity() {
             },
             { error -> error.printStackTrace() }) {
             override fun getHeaders(): MutableMap<String, String> {
-                val headers = HashMap<String, String>()
-                headers["Authorization"] = "Bearer ${sessionManager.getToken()}"
-                return headers
+                return mutableMapOf("Authorization" to "Bearer ${sessionManager.getToken()}")
             }
         }
         req.retryPolicy = DefaultRetryPolicy(8000, DefaultRetryPolicy.DEFAULT_MAX_RETRIES, DefaultRetryPolicy.DEFAULT_BACKOFF_MULT)

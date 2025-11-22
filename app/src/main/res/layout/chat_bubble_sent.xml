@@ -23,10 +23,8 @@
 
         <ImageView
             android:id="@+id/image_message"
-            android:layout_width="wrap_content"
+            android:layout_width="240dp"
             android:layout_height="wrap_content"
-            android:maxWidth="240dp"
-            android:maxHeight="240dp"
             android:adjustViewBounds="true"
             android:contentDescription="Sent image"
             android:padding="5dp"
@@ -34,22 +32,24 @@
             android:visibility="gone" />
 
         <FrameLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content">
+            android:id="@+id/video_container"
+            android:layout_width="240dp"
+            android:layout_height="240dp"
+            android:visibility="gone">
 
-            <VideoView
-                android:id="@+id/video_message"
-                android:layout_width="240dp"
-                android:layout_height="240dp"
-                android:visibility="gone" />
+            <ImageView
+                android:id="@+id/video_thumbnail"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="centerCrop"
+                android:contentDescription="Video thumbnail" />
 
             <ImageView
                 android:id="@+id/play_icon"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
                 android:src="@drawable/ic_play_arrow"
-                android:layout_gravity="center"
-                android.visibility="gone" />
+                android:layout_gravity="center" />
         </FrameLayout>
 
     </FrameLayout>

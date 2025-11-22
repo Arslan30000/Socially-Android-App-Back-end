@@ -1,14 +1,14 @@
 package com.example.i230572_i230689
 
-import android.graphics.BitmapFactory
-import android.util.Base64
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
+import com.squareup.picasso.Picasso
 import de.hdodenhof.circleimageview.CircleImageView
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -48,15 +48,13 @@ class ChatsAdapter(
                 user.username
             }
             
+            // Corrected: Load images from file paths using Picasso
             if (user.imageBase64.isNotEmpty()) {
-                try {
-                    val bytes = Base64.decode(user.imageBase64, Base64.DEFAULT)
-                    val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                    holder.profileImage.setImageBitmap(bitmap)
-                } catch (e: Exception) { e.printStackTrace() }
+                Picasso.get().load(File(user.imageBase64)).placeholder(R.drawable.profile_image).into(holder.profileImage)
+            } else {
+                holder.profileImage.setImageResource(R.drawable.profile_image)
             }
             
-            // Show online status indicator
             holder.onlineIndicator?.visibility = if (user.onlineStatus == "online") View.VISIBLE else View.GONE
         }
 
