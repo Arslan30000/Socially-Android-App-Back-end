@@ -1,60 +1,63 @@
 <?php
 require "db.php";
 require "helpers.php";
-require "fcm_helper.php";
 
+// Get JSON body
 $raw = file_get_contents('php://input');
 $data = json_decode($raw, true);
-if (!$data) $data = $_POST;
+if (!$data) $data = $_POST; // Fallback for form-data
 
+// Authenticate user
 $token = get_bearer_token();
-if (!$token) json_response(["success" => false, "message" => "No token provided"]);
+if (!$token) {
+    json_response(["success" => false, "message" => "No token provided"]);
+}
 
-$stmt = $conn->prepare("SELECT user_id, (SELECT username FROM users WHERE id = user_id) as username FROM tokens WHERE token=? LIMIT 1");
+$stmt = $conn->prepare(
+    "SELECT u.id as user_id, u.name, u.lastname 
+     FROM users u 
+     JOIN tokens t ON u.id = t.user_id 
+     WHERE t.token = ? LIMIT 1"
+);
 $stmt->bind_param("s", $token);
 $stmt->execute();
 $res = $stmt->get_result();
-if ($res->num_rows === 0) json_response(["success" => false, "message" => "Invalid token"]);
+if ($res->num_rows === 0) {
+    json_response(["success" => false, "message" => "Invalid token"]);
+}
 $caller = $res->fetch_assoc();
 $caller_id = $caller['user_id'];
-$caller_name = $caller['username'];
+$caller_name = trim($caller['name'] . ' ' . $caller['lastname']);
 $stmt->close();
 
+// Get parameters
 $receiver_id = isset($data['receiver_id']) ? (int)$data['receiver_id'] : 0;
 $channel_name = isset($data['channel_name']) ? $data['channel_name'] : '';
-$call_type = isset($data['call_type']) ? $data['call_type'] : 'video';
+$call_type = isset($data['call_type']) ? $data['call_type'] : 'video'; // 'video' or 'audio'
 
-if ($receiver_id <= 0 || empty($channel_name)) {
-    json_response(["success" => false, "message" => "receiver_id and channel_name are required"]);
+if ($receiver_id <= 0 || empty($channel_name) || !in_array($call_type, ['video', 'audio'])) {
+    json_response(["success" => false, "message" => "A valid receiver_id, channel_name, and call_type are required."]);
 }
 
-// Get the receiver's FCM token from the new fcm_tokens table
-$fcm_stmt = $conn->prepare("SELECT fcm_token FROM fcm_tokens WHERE user_id = ?");
-$fcm_stmt->bind_param("i", $receiver_id);
-$fcm_stmt->execute();
-$fcm_stmt->bind_result($fcm_token);
-$fcm_stmt->fetch();
-$fcm_stmt->close();
-
-if (empty($fcm_token)) {
-    json_response(["success" => false, "message" => "Receiver is not available for calls"]);
+// Prevent duplicate pending calls for the same receiver
+$check_stmt = $conn->prepare("SELECT id FROM pending_calls WHERE receiver_id = ?");
+$check_stmt->bind_param("i", $receiver_id);
+$check_stmt->execute();
+if ($check_stmt->get_result()->num_rows > 0) {
+    json_response(["success" => false, "message" => "That user already has a pending call."]);
 }
+$check_stmt->close();
 
-// Prepare the data payload for the notification
-$notification_data = [
-    "type" => "incoming_call",
-    "caller_name" => $caller_name,
-    "channel_name" => $channel_name,
-    "call_type" => $call_type
-];
+// Insert the call into the pending_calls table
+$insert_stmt = $conn->prepare(
+    "INSERT INTO pending_calls (caller_id, caller_name, receiver_id, channel_name, call_type) VALUES (?, ?, ?, ?, ?)"
+);
+$insert_stmt->bind_param("isiss", $caller_id, $caller_name, $receiver_id, $channel_name, $call_type);
 
-// Send the notification using our new helper
-$result = send_fcm_notification($fcm_token, $notification_data);
-
-if (isset($result['name'])) {
-    json_response(["success" => true, "message" => "Call initiated successfully"]);
+if ($insert_stmt->execute()) {
+    json_response(["success" => true, "message" => "Call initiated and is now pending."]);
 } else {
-    error_log("FCM Send Error: " . json_encode($result));
-    json_response(["success" => false, "message" => "Failed to notify receiver", "fcm_response" => $result]);
+    json_response(["success" => false, "message" => "Failed to initiate call."]);
 }
+$insert_stmt->close();
 ?>

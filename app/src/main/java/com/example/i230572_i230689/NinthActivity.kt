@@ -1,4 +1,5 @@
 ﻿package com.example.i230572_i230689
+
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
@@ -21,14 +22,8 @@ import androidx.recyclerview.widget.RecyclerView
 import com.android.volley.DefaultRetryPolicy
 import com.android.volley.toolbox.StringRequest
 import com.android.volley.toolbox.Volley
-import com.google.firebase.database.DataSnapshot
-import com.google.firebase.database.DatabaseError
-import com.google.firebase.database.FirebaseDatabase
-import com.google.firebase.database.ValueEventListener
 import org.json.JSONObject
-import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
-import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.UUID
@@ -39,8 +34,9 @@ class NinthActivity : AppCompatActivity() {
     private lateinit var messageInput: EditText
     private lateinit var sendButton: ImageView
     private lateinit var galleryButton: ImageView
-    private lateinit var videoButton: ImageView
-    private lateinit var audioButton: ImageView
+    private lateinit var sendVideoIconButton: ImageView
+    private lateinit var videoCallButton: ImageView
+    private lateinit var audioCallButton: ImageView
     private lateinit var messageAdapter: MessageAdapter
     private val messages = mutableListOf<Message>()
     private val usersMap = mutableMapOf<String, User>()
@@ -55,8 +51,10 @@ class NinthActivity : AppCompatActivity() {
     private var statusRefreshRunnable: Runnable? = null
     private var messageRefreshHandler: Handler? = null
     private var messageRefreshRunnable: Runnable? = null
+    private var callCheckHandler: Handler? = null
+    private var callCheckRunnable: Runnable? = null
+    private var incomingCallDialog: AlertDialog? = null
 
-    private lateinit var callListener: ValueEventListener
 
     private val pickImageLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
@@ -89,8 +87,10 @@ class NinthActivity : AppCompatActivity() {
         messageInput = findViewById(R.id.message_input)
         sendButton = findViewById(R.id.share_icon)
         galleryButton = findViewById(R.id.gallery_icon)
-        videoButton = findViewById(R.id.video_icon)
-        audioButton = findViewById(R.id.info_icon)
+        sendVideoIconButton = findViewById(R.id.send_video_icon)
+        videoCallButton = findViewById(R.id.video_call_icon)
+        audioCallButton = findViewById(R.id.audio_call_icon)
+
 
         val vanishSwitch = findViewById<android.widget.Switch>(R.id.vanish_toggle)
         vanishToggleState = vanishSwitch.isChecked
@@ -107,61 +107,12 @@ class NinthActivity : AppCompatActivity() {
 
         loadOtherUser()
         loadMessages()
-        startStatusRefresh()
-        startMessageRefresh()
-        listenForIncomingCalls()
-
+        
         sendButton.setOnClickListener { sendMessage() }
-        galleryButton.setOnClickListener { openGallery() }
-        videoButton.setOnClickListener { openVideoGallery() }
-        audioButton.setOnClickListener { initiateCall("audio") }
-    }
-
-    private fun initiateCall(callType: String) {
-        val channelName = UUID.randomUUID().toString()
-        val callRef = FirebaseDatabase.getInstance().getReference("calls/${otherUserId}")
-        val callData = mapOf(
-            "callerId" to sessionManager.getUserId(),
-            "channelName" to channelName,
-            "callType" to callType,
-            "status" to "ringing"
-        )
-        callRef.setValue(callData).addOnSuccessListener {
-            val intent = Intent(this, TenthActivity::class.java).apply {
-                putExtra("channel_name", channelName)
-                putExtra("call_type", callType)
-            }
-            startActivity(intent)
-        }
-    }
-
-    private fun listenForIncomingCalls() {
-        val currentUserId = sessionManager.getUserId()
-        val callRef = FirebaseDatabase.getInstance().getReference("calls/$currentUserId")
-        callListener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                if (snapshot.exists()) {
-                    val status = snapshot.child("status").getValue(String::class.java)
-                    if (status == "ringing") {
-                        val callerId = snapshot.child("callerId").getValue(String::class.java)
-                        val channelName = snapshot.child("channelName").getValue(String::class.java)
-                        val callType = snapshot.child("callType").getValue(String::class.java)
-
-                        val intent = Intent(this@NinthActivity, IncomingCallActivity::class.java).apply {
-                            putExtra("caller_id", callerId)
-                            putExtra("channel_name", channelName)
-                            putExtra("call_type", callType)
-                        }
-                        startActivity(intent)
-                    }
-                }
-            }
-
-            override fun onCancelled(error: DatabaseError) {
-                // Handle error
-            }
-        }
-        callRef.addValueEventListener(callListener)
+        galleryButton.setOnClickListener { openGalleryForImage() }
+        sendVideoIconButton.setOnClickListener { openGalleryForVideo() }
+        videoCallButton.setOnClickListener { initiateCall("video") }
+        audioCallButton.setOnClickListener { initiateCall("audio") }
     }
 
     override fun onResume() {
@@ -169,12 +120,14 @@ class NinthActivity : AppCompatActivity() {
         setStatus("online")
         startStatusRefresh()
         startMessageRefresh()
+        startCallChecking()
     }
 
     override fun onPause() {
         super.onPause()
         stopStatusRefresh()
         stopMessageRefresh()
+        stopCallChecking()
         setStatus("offline")
         if (!chatId.isNullOrEmpty()) {
             callVanishOnClose(chatId!!)
@@ -187,29 +140,174 @@ class NinthActivity : AppCompatActivity() {
         super.onDestroy()
         stopStatusRefresh()
         stopMessageRefresh()
-        val currentUserId = sessionManager.getUserId()
-        FirebaseDatabase.getInstance().getReference("calls/$currentUserId").removeEventListener(callListener)
+        stopCallChecking()
     }
+
+    // =============================================================================================
+    // Call Handling Logic
+    // =============================================================================================
+
+    private fun initiateCall(callType: String) {
+        val channelName = UUID.randomUUID().toString()
+        val token = sessionManager.getToken() ?: return
+        val url = BuildConfig.BASE_URL + "initiate_call.php"
+        val rq = Volley.newRequestQueue(this)
+
+        val callPayload = JSONObject().apply {
+            put("receiver_id", otherUserId.toInt())
+            put("channel_name", channelName)
+            put("call_type", callType)
+        }
+
+        val req = object : StringRequest(Method.POST, url,
+            { response ->
+                try {
+                    val res = JSONObject(response.trim())
+                    if (res.optBoolean("success", false)) {
+                        // If call is initiated successfully, join the call activity
+                        val intent = Intent(this@NinthActivity, TenthActivity::class.java).apply {
+                            putExtra("channel_name", channelName)
+                            putExtra("call_type", callType)
+                            putExtra("agora_token", "") // You might need to generate this
+                        }
+                        startActivity(intent)
+                    } else {
+                        Toast.makeText(this@NinthActivity, res.optString("message", "User is busy or unavailable."), Toast.LENGTH_SHORT).show()
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    Toast.makeText(this@NinthActivity, "Failed to parse server response.", Toast.LENGTH_SHORT).show()
+                }
+            },
+            { error ->
+                error.printStackTrace()
+                Toast.makeText(this@NinthActivity, "Network error: Could not initiate call.", Toast.LENGTH_SHORT).show()
+            }) {
+            override fun getBody(): ByteArray = callPayload.toString().toByteArray()
+            override fun getBodyContentType(): String = "application/json"
+            override fun getHeaders(): MutableMap<String, String> {
+                return mutableMapOf("Authorization" to "Bearer $token")
+            }
+        }
+        rq.add(req)
+    }
+
+    private fun startCallChecking() {
+        if (callCheckHandler == null) {
+            callCheckHandler = Handler(Looper.getMainLooper())
+        }
+        stopCallChecking()
+        callCheckRunnable = Runnable {
+            if (!isDestroyed) {
+                checkForIncomingCalls()
+            }
+            callCheckHandler?.postDelayed(callCheckRunnable!!, 5000) // Poll every 5 seconds
+        }
+        callCheckHandler?.post(callCheckRunnable!!)
+    }
+
+    private fun stopCallChecking() {
+        callCheckRunnable?.let { callCheckHandler?.removeCallbacks(it) }
+    }
+
+    private fun checkForIncomingCalls() {
+        // Do not check for calls if a dialog is already showing
+        if (incomingCallDialog != null && incomingCallDialog!!.isShowing) {
+            return
+        }
+
+        val token = sessionManager.getToken() ?: return
+        val url = BuildConfig.BASE_URL + "check_for_call.php"
+        val rq = Volley.newRequestQueue(this)
+
+        val req = object : StringRequest(Method.GET, url,
+            { response ->
+                try {
+                    val res = JSONObject(response.trim())
+                    if (res.optBoolean("success") && res.optBoolean("call_waiting")) {
+                        val callerName = res.getString("caller_name")
+                        val channelName = res.getString("channel_name")
+                        val callType = res.getString("call_type")
+                        showIncomingCallDialog(callerName, channelName, callType)
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            },
+            { /* Suppress errors for polling */ }) {
+            override fun getHeaders(): MutableMap<String, String> {
+                return mutableMapOf("Authorization" to "Bearer $token")
+            }
+        }
+        rq.add(req)
+    }
+
+    private fun showIncomingCallDialog(callerName: String, channelName: String, callType: String) {
+        val callTypeName = if (callType == "video") "Video" else "Audio"
+        
+        val builder = AlertDialog.Builder(this)
+        builder.setTitle("Incoming $callTypeName Call")
+        builder.setMessage("$callerName is calling you.")
+        builder.setPositiveButton("Accept") { dialog, _ ->
+            val intent = Intent(this, TenthActivity::class.java).apply {
+                putExtra("channel_name", channelName)
+                putExtra("call_type", callType)
+                putExtra("agora_token", "") // You might need to generate this
+            }
+            startActivity(intent)
+            dialog.dismiss()
+        }
+        builder.setNegativeButton("Decline") { dialog, _ ->
+            endCall(channelName)
+            dialog.dismiss()
+        }
+        builder.setCancelable(false) // User must accept or decline
+
+        incomingCallDialog = builder.create()
+        incomingCallDialog?.show()
+    }
+
+    private fun endCall(channelName: String) {
+        val token = sessionManager.getToken() ?: return
+        val url = BuildConfig.BASE_URL + "end_call.php"
+        val rq = Volley.newRequestQueue(this)
+
+        val payload = JSONObject().apply {
+            put("channel_name", channelName)
+        }
+
+        val req = object : StringRequest(Method.POST, url,
+            { /* Call ended successfully on server */ },
+            { /* Suppress errors */ }) {
+            override fun getBody(): ByteArray = payload.toString().toByteArray()
+            override fun getBodyContentType(): String = "application/json"
+            override fun getHeaders(): MutableMap<String, String> {
+                return mutableMapOf("Authorization" to "Bearer $token")
+            }
+        }
+        rq.add(req)
+    }
+
+    // =============================================================================================
+    // Existing Message and Status Logic (Corrected)
+    // =============================================================================================
     
     private fun startStatusRefresh() {
         if (statusRefreshHandler == null) {
             statusRefreshHandler = Handler(Looper.getMainLooper())
         }
-        stopStatusRefresh() // Clear any existing runnable
+        stopStatusRefresh() 
         statusRefreshRunnable = Runnable {
             if (!isDestroyed && otherUserId.isNotEmpty()) {
                 fetchUserOnlineStatus(otherUserId)
             }
-            // Schedule next refresh in 5 seconds
             statusRefreshHandler?.postDelayed(statusRefreshRunnable!!, 5000)
         }
         statusRefreshHandler?.post(statusRefreshRunnable!!)
     }
     
     private fun stopStatusRefresh() {
-        if (statusRefreshHandler != null && statusRefreshRunnable != null) {
-            statusRefreshHandler?.removeCallbacks(statusRefreshRunnable!!)
-        }
+        statusRefreshRunnable?.let { statusRefreshHandler?.removeCallbacks(it) }
     }
 
     private fun startMessageRefresh() {
@@ -227,9 +325,7 @@ class NinthActivity : AppCompatActivity() {
     }
 
     private fun stopMessageRefresh() {
-        if (messageRefreshHandler != null && messageRefreshRunnable != null) {
-            messageRefreshHandler?.removeCallbacks(messageRefreshRunnable!!)
-        }
+        messageRefreshRunnable?.let { messageRefreshHandler?.removeCallbacks(it) }
     }
 
     private fun setStatus(status: String) {
@@ -287,7 +383,6 @@ class NinthActivity : AppCompatActivity() {
                             findViewById<TextView>(R.id.chat_name).text =
                                 "${user.name} ${user.lastname}".trim()
                             
-                            // Fetch and display online status
                             fetchUserOnlineStatus(otherUserId)
                         }
                     }
@@ -324,7 +419,6 @@ class NinthActivity : AppCompatActivity() {
                             if (user != null) {
                                 user.onlineStatus = status
                                 user.lastSeen = statusObj.optString("last_seen", null)
-                                // Update UI to show online status
                                 updateChatHeaderStatus(status)
                             }
                         }
@@ -354,8 +448,6 @@ class NinthActivity : AppCompatActivity() {
 
     private fun loadMessages() {
         if (chatId.isNullOrEmpty() || !chatId!!.all { it.isDigit() }) {
-            // If there's no valid chatId, we can't load messages.
-            // Check for cached messages for this user.
             val cached = cache.getMessagesForConversation(otherUserId)
             if (cached.isNotEmpty()) {
                 messages.clear()
@@ -397,10 +489,7 @@ class NinthActivity : AppCompatActivity() {
                                 newMessages.add(m)
                             }
                         }
-                        
-                        // Smartly update the RecyclerView
                         updateMessages(newMessages)
-                        
                         markSeen(chatId!!)
                     }
                 } catch (e: Exception) { e.printStackTrace() }
@@ -420,7 +509,6 @@ class NinthActivity : AppCompatActivity() {
         val newMessagesMap = newMessages.associateBy { it.messageId }
         val newMessagesIds = newMessagesMap.keys
 
-        // Find messages to remove
         val messagesToRemove = messages.filter { it.messageId !in newMessagesIds }
         messagesToRemove.forEach { msg ->
             val index = messages.indexOfFirst { it.messageId == msg.messageId }
@@ -430,16 +518,13 @@ class NinthActivity : AppCompatActivity() {
             }
         }
 
-        // Find messages to add or update
         newMessages.forEach { newMessage ->
             val existingMessage = messages.find { it.messageId == newMessage.messageId }
             if (existingMessage == null) {
-                // Add new message
                 messages.add(newMessage)
                 messageAdapter.notifyItemInserted(messages.size - 1)
                 recyclerView.scrollToPosition(messages.size - 1)
             } else {
-                // Update existing message if content or edited status has changed
                 if (existingMessage.text != newMessage.text || existingMessage.isEdited != newMessage.isEdited) {
                     existingMessage.text = newMessage.text
                     existingMessage.isEdited = newMessage.isEdited
@@ -519,12 +604,12 @@ class NinthActivity : AppCompatActivity() {
         rq.add(req)
     }
 
-    private fun openGallery() {
+    private fun openGalleryForImage() {
         val intent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
         pickImageLauncher.launch(intent)
     }
 
-    private fun openVideoGallery() {
+    private fun openGalleryForVideo() {
         val intent = Intent(Intent.ACTION_PICK, MediaStore.Video.Media.EXTERNAL_CONTENT_URI)
         pickVideoLauncher.launch(intent)
     }

@@ -1,17 +1,19 @@
 package com.example.i230572_i230689
 
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
+import androidx.core.content.ContextCompat.startForegroundService
 
 class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-
         val sm = SessionManager(this)
 
         Handler(Looper.getMainLooper()).postDelayed({
@@ -22,5 +24,10 @@ class MainActivity : AppCompatActivity() {
             }
             finish()
         }, 5000)
+
     }
+
 }
+
+
+
