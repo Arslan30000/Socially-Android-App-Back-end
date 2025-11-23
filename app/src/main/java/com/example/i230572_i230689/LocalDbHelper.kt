@@ -13,10 +13,11 @@ data class QueuedAction(
     val payload: String
 )
 
-class LocalDbHelper(private val context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB_VERSION) {
+class LocalDbHelper(private val context: Context, userId: String) : SQLiteOpenHelper(context, DB_NAME_PREFIX + userId + DB_SUFFIX, null, DB_VERSION) {
     companion object {
-        private const val DB_NAME = "instagram_cache_v2.db"
-        private const val DB_VERSION = 1
+        private const val DB_NAME_PREFIX = "instagram_cache_user_"
+        private const val DB_SUFFIX = ".db"
+        private const val DB_VERSION = 1 // Version can be reset for this new architecture
         
         private const val T_MESSAGES = "messages"
         private const val T_POSTS = "posts"
@@ -248,9 +249,11 @@ class LocalDbHelper(private val context: Context) : SQLiteOpenHelper(context, DB
         }
     }
 
-    fun getPosts(): List<Post> {
+    fun getPosts(forUserId: String? = null): List<Post> {
         val db = readableDatabase
-        val cursor = db.query(T_POSTS, null, null, null, null, null, "timestamp DESC")
+        val selection = if (forUserId != null) "userId = ?" else null
+        val selectionArgs = if (forUserId != null) arrayOf(forUserId) else null
+        val cursor = db.query(T_POSTS, null, selection, selectionArgs, null, null, "timestamp DESC")
         val posts = mutableListOf<Post>()
         while (cursor.moveToNext()) {
             posts.add(Post(
@@ -268,6 +271,13 @@ class LocalDbHelper(private val context: Context) : SQLiteOpenHelper(context, DB
         }
         cursor.close()
         return posts
+    }
+
+    fun deleteAllPosts(forUserId: String? = null) {
+        val db = writableDatabase
+        val selection = if (forUserId != null) "userId = ?" else null
+        val selectionArgs = if (forUserId != null) arrayOf(forUserId) else null
+        db.delete(T_POSTS, selection, selectionArgs)
     }
 
     // Story Methods
@@ -292,9 +302,11 @@ class LocalDbHelper(private val context: Context) : SQLiteOpenHelper(context, DB
         }
     }
 
-    fun getStories(): List<Story> {
+    fun getStories(forUserId: String? = null): List<Story> {
         val db = readableDatabase
-        val cursor = db.query(T_STORIES, null, null, null, null, null, "timestamp DESC")
+        val selection = if (forUserId != null) "userId = ?" else null
+        val selectionArgs = if (forUserId != null) arrayOf(forUserId) else null
+        val cursor = db.query(T_STORIES, null, selection, selectionArgs, null, null, "timestamp DESC")
         val stories = mutableListOf<Story>()
         while (cursor.moveToNext()) {
             stories.add(Story(
@@ -308,5 +320,12 @@ class LocalDbHelper(private val context: Context) : SQLiteOpenHelper(context, DB
         }
         cursor.close()
         return stories
+    }
+
+    fun deleteAllStories(forUserId: String? = null) {
+        val db = writableDatabase
+        val selection = if (forUserId != null) "userId = ?" else null
+        val selectionArgs = if (forUserId != null) arrayOf(forUserId) else null
+        db.delete(T_STORIES, selection, selectionArgs)
     }
 }

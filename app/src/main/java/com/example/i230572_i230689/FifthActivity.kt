@@ -1,12 +1,16 @@
 package com.example.i230572_i230689
 
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.MediaStore
 import android.util.Base64
 import android.util.Log
@@ -39,6 +43,10 @@ class FifthActivity : AppCompatActivity() {
     private lateinit var sessionManager: SessionManager
     private lateinit var dbHelper: LocalDbHelper
 
+    private val feedRefreshHandler = Handler(Looper.getMainLooper())
+    private var feedRefreshRunnable: Runnable? = null
+    private var profileUpdateReceiver: BroadcastReceiver? = null
+
     private val galleryLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == RESULT_OK) {
             val imageUri = result.data?.data
@@ -59,12 +67,12 @@ class FifthActivity : AppCompatActivity() {
         setContentView(R.layout.main_page)
 
         sessionManager = SessionManager(this)
-        dbHelper = LocalDbHelper(this)
-
         if (!sessionManager.isLoggedIn()) {
             redirectToLogin()
             return
         }
+        
+        dbHelper = LocalDbHelper(this, sessionManager.getUserId().toString())
 
         setupRecyclerViews()
         setupBottomNavigationBar()
@@ -81,15 +89,43 @@ class FifthActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         if (sessionManager.isLoggedIn()) {
-            // Only fetch fresh data on resume if online
             if (isOnline()) {
-                fetchStoriesForFeed()
-                fetchPostFeed()
-                fetchCurrentUserProfileForNav()
+                setStatus("online")
             }
+            loadData()
+            startFeedRefresh()
         } else {
             redirectToLogin()
         }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        stopFeedRefresh()
+        if (isOnline()) {
+            setStatus("offline")
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        try {
+            val filter = IntentFilter("profile_updated")
+            profileUpdateReceiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context?, intent: Intent?) {
+                    fetchCurrentUserProfileForNav() // Refresh profile icon
+                }
+            }
+            registerReceiver(profileUpdateReceiver, filter)
+        } catch (_: Exception) {}
+    }
+
+    override fun onStop() {
+        super.onStop()
+        try {
+            profileUpdateReceiver?.let { unregisterReceiver(it) }
+        } catch (_: Exception) {}
+        profileUpdateReceiver = null
     }
 
     private fun isOnline(): Boolean {
@@ -104,9 +140,7 @@ class FifthActivity : AppCompatActivity() {
     }
 
     private fun loadData() {
-        // Load from cache first for an instant UI
         loadDataFromCache()
-        // Then, fetch from the network to get the latest data
         if (isOnline()) {
             fetchStoriesForFeed()
             fetchPostFeed()
@@ -117,11 +151,10 @@ class FifthActivity : AppCompatActivity() {
     }
 
     private fun loadDataFromCache() {
+        // For FifthActivity (main feed), we load all stories and posts, not just the current user's
         val cachedPosts = dbHelper.getPosts()
         if (cachedPosts.isNotEmpty()) {
-            postList.clear()
-            postList.addAll(cachedPosts)
-            postAdapter.notifyDataSetChanged()
+            updatePostList(cachedPosts)
             Log.d("FifthActivity", "Loaded ${cachedPosts.size} posts from cache.")
         }
 
@@ -138,26 +171,46 @@ class FifthActivity : AppCompatActivity() {
         }
     }
 
+    private fun startFeedRefresh() {
+        stopFeedRefresh() // Ensure no multiple runnables
+        feedRefreshRunnable = Runnable {
+            if (isOnline()) {
+                fetchPostFeed()
+            }
+            feedRefreshHandler.postDelayed(feedRefreshRunnable!!, 10000) // Poll every 10 seconds
+        }
+        feedRefreshHandler.post(feedRefreshRunnable!!)
+    }
+
+    private fun stopFeedRefresh() {
+        feedRefreshRunnable?.let { feedRefreshHandler.removeCallbacks(it) }
+    }
+
     private fun setupRecyclerViews() {
         recyclerViewStory = findViewById(R.id.recycler_view_story)
         recyclerViewStory.setHasFixedSize(true)
         recyclerViewStory.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
 
-        storyAdapter = StoryAdapter(this, storyList) { story ->
-            if (story.isAddButton) {
-                if (story.hasStories) {
+        storyAdapter = StoryAdapter(this, storyList, 
+            onStoryClick = { story ->
+                if (story.isAddButton) {
+                    if (story.hasStories) {
+                        val intent = Intent(this, NineteenActivity::class.java)
+                        intent.putExtra("USER_ID", story.userId)
+                        startActivity(intent)
+                    } else {
+                        openGallery()
+                    }
+                } else {
                     val intent = Intent(this, NineteenActivity::class.java)
                     intent.putExtra("USER_ID", story.userId)
                     startActivity(intent)
-                } else {
-                    openGallery()
                 }
-            } else {
-                val intent = Intent(this, NineteenActivity::class.java)
-                intent.putExtra("USER_ID", story.userId)
-                startActivity(intent)
+            },
+            onAddStoryClick = {
+                openGallery()
             }
-        }
+        )
         recyclerViewStory.adapter = storyAdapter
 
         postsRecyclerView = findViewById(R.id.posts_recyclerview)
@@ -208,10 +261,13 @@ class FifthActivity : AppCompatActivity() {
                             }
                         }
                     }
+                    // Clear existing stories from cache before upserting new ones
+                    dbHelper.deleteAllStories()
+                    dbHelper.upsertStories(networkStories.filter { !it.isAddButton })
+
                     storyList.clear()
                     storyList.addAll(networkStories)
                     storyAdapter.notifyDataSetChanged()
-                    dbHelper.upsertStories(networkStories.filter { !it.isAddButton })
                 } catch (e: Exception) {
                     Log.e("StoriesFeed", "Error parsing response: ${e.message}")
                 }
@@ -260,10 +316,10 @@ class FifthActivity : AppCompatActivity() {
                                 ))
                             }
                         }
-                        postList.clear()
-                        postList.addAll(fetchedPosts)
-                        postAdapter.notifyDataSetChanged()
+                        // Clear existing posts from cache before upserting new ones
+                        dbHelper.deleteAllPosts()
                         dbHelper.upsertPosts(fetchedPosts)
+                        updatePostList(fetchedPosts)
                     }
                 } catch (e: Exception) {
                     Log.e("PostFeed", "Error parsing response: ${e.message}")
@@ -277,6 +333,15 @@ class FifthActivity : AppCompatActivity() {
             }
         }
         rq.add(req)
+    }
+    
+    private fun updatePostList(newPosts: List<Post>) {
+        // A more intelligent update logic to avoid flickering
+        if (postList.size != newPosts.size || postList != newPosts) {
+            postList.clear()
+            postList.addAll(newPosts)
+            postAdapter.notifyDataSetChanged()
+        }
     }
 
     private fun saveImageToLocalCache(base64String: String, fileName: String): String {
@@ -331,6 +396,30 @@ class FifthActivity : AppCompatActivity() {
             }
         }
         req.retryPolicy = DefaultRetryPolicy(30000, DefaultRetryPolicy.DEFAULT_MAX_RETRIES, DefaultRetryPolicy.DEFAULT_BACKOFF_MULT)
+        rq.add(req)
+    }
+
+    private fun setStatus(status: String) {
+        val token = sessionManager.getToken() ?: return
+        val url = BuildConfig.BASE_URL + "set_status.php"
+        val rq = Volley.newRequestQueue(this)
+        val req = object : StringRequest(Method.POST, url,
+            { _ -> },
+            { e -> e.printStackTrace() }) {
+            override fun getBody(): ByteArray? {
+                val obj = JSONObject()
+                obj.put("status", status)
+                return obj.toString().toByteArray()
+            }
+
+            override fun getBodyContentType(): String = "application/json"
+            override fun getHeaders(): MutableMap<String, String> {
+                val h = HashMap<String, String>()
+                h["Authorization"] = "Bearer ${sessionManager.getToken()}"
+                return h
+            }
+        }
+        req.retryPolicy = DefaultRetryPolicy(8000, DefaultRetryPolicy.DEFAULT_MAX_RETRIES, DefaultRetryPolicy.DEFAULT_BACKOFF_MULT)
         rq.add(req)
     }
 

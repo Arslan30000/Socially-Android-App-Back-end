@@ -7,28 +7,28 @@ import android.content.Context
 import android.content.Intent
 import android.media.RingtoneManager
 import android.os.Build
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 
 class MyFirebaseMessagingService : FirebaseMessagingService() {
 
+    override fun onNewToken(token: String) {
+        super.onNewToken(token)
+        Log.d("FCM_Token", "Refreshed token: $token")
+        // Save the token to your app's preferences
+        val sessionManager = SessionManager(applicationContext)
+        sessionManager.saveFcmToken(token)
+    }
+
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
-        // This is triggered by a push notification from the FCM server.
-        // We are not using this for foreground notifications.
         remoteMessage.notification?.let {
             showNotification(this, it.title, it.body)
         }
     }
 
     companion object {
-        /**
-         * Creates and shows a simple notification.
-         *
-         * @param context Context of the app.
-         * @param title Title of the notification.
-         * @param body Body of the notification.
-         */
         fun showNotification(context: Context, title: String?, body: String?) {
             val intent = Intent(context, MainActivity::class.java)
             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
@@ -52,7 +52,6 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             val notificationManager =
                 context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-            // Since android Oreo notification channel is needed.
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val channel = NotificationChannel(
                     channelId,

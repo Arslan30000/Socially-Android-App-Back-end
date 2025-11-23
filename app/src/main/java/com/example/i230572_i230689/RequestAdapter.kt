@@ -1,14 +1,14 @@
 package com.example.i230572_i230689
 
-import android.graphics.BitmapFactory
-import android.util.Base64
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
+import com.squareup.picasso.Picasso
 import de.hdodenhof.circleimageview.CircleImageView
 import android.widget.RelativeLayout
+import java.io.File
 
 data class FollowRequest(
     val uid: String = "",
@@ -19,7 +19,8 @@ data class FollowRequest(
 
 class RequestAdapter(
     private val requests: List<FollowRequest>,
-    private val onAcceptClick: (FollowRequest) -> Unit
+    private val onAcceptClick: (FollowRequest) -> Unit,
+    private val onRejectClick: (FollowRequest) -> Unit
 ) : RecyclerView.Adapter<RequestAdapter.RequestViewHolder>() {
 
     inner class RequestViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
@@ -27,6 +28,7 @@ class RequestAdapter(
         val usernameText: TextView = itemView.findViewById(R.id.usernameText)
         val timeText: TextView = itemView.findViewById(R.id.timeText)
         val acceptBtn: RelativeLayout = itemView.findViewById(R.id.acceptBtn)
+        val rejectBtn: RelativeLayout = itemView.findViewById(R.id.rejectBtn)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RequestViewHolder {
@@ -42,12 +44,13 @@ class RequestAdapter(
         holder.timeText.text = if (elapsedHours < 24) "${elapsedHours}h ago" else "${elapsedHours / 24}d ago"
 
         if (request.imageBase64.isNotEmpty()) {
-            val imageBytes = Base64.decode(request.imageBase64, Base64.DEFAULT)
-            val bmp = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
-            holder.profileImage.setImageBitmap(bmp)
+            Picasso.get().load(File(request.imageBase64)).placeholder(R.drawable.profile_image).into(holder.profileImage)
+        } else {
+            holder.profileImage.setImageResource(R.drawable.profile_image)
         }
 
         holder.acceptBtn.setOnClickListener { onAcceptClick(request) }
+        holder.rejectBtn.setOnClickListener { onRejectClick(request) }
     }
 
     override fun getItemCount(): Int = requests.size

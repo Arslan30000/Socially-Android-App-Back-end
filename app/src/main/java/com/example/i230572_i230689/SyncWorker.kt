@@ -12,17 +12,25 @@ import kotlin.coroutines.resumeWithException
 
 class SyncWorker(appContext: Context, workerParams: WorkerParameters) : CoroutineWorker(appContext, workerParams) {
 
-    private val dbHelper = LocalDbHelper(appContext)
     private val sessionManager = SessionManager(appContext)
 
     override suspend fun doWork(): Result {
-        val queuedActions = dbHelper.getQueuedActions()
-        if (queuedActions.isEmpty()) {
-            Log.d("SyncWorker", "No actions to sync.")
+        val userId = sessionManager.getUserId().toString()
+        if (userId.isEmpty() || userId == "0") {
+            Log.d("SyncWorker", "No user logged in, skipping sync.")
             return Result.success()
         }
 
-        Log.d("SyncWorker", "Found ${queuedActions.size} actions to sync.")
+
+        val dbHelper = LocalDbHelper(applicationContext, userId)
+        
+        val queuedActions = dbHelper.getQueuedActions()
+        if (queuedActions.isEmpty()) {
+            Log.d("SyncWorker", "No actions to sync for user $userId.")
+            return Result.success()
+        }
+
+        Log.d("SyncWorker", "Found ${queuedActions.size} actions to sync for user $userId.")
         var allSucceeded = true
 
         for (action in queuedActions) {
@@ -48,7 +56,7 @@ class SyncWorker(appContext: Context, workerParams: WorkerParameters) : Coroutin
         return suspendCancellableCoroutine { continuation ->
             val token = sessionManager.getToken()
             if (token.isNullOrEmpty()) {
-                Log.e("SyncWorker", "Cannot sync, user is not logged in.")
+                Log.e("SyncWorker", "Cannot sync, user token is missing.")
                 continuation.resume(false)
                 return@suspendCancellableCoroutine
             }
@@ -72,7 +80,7 @@ class SyncWorker(appContext: Context, workerParams: WorkerParameters) : Coroutin
                 },
                 { error ->
                     Log.e("SyncWorker", "Network error for $url: ${error.message}")
-                    continuation.resume(false) // Resume with false on network error so it can be retried
+                    continuation.resume(false)
                 }) {
                 override fun getBody(): ByteArray {
                     return payload.toByteArray(Charsets.UTF_8)

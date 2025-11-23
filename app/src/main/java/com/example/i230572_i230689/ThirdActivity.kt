@@ -44,7 +44,7 @@ class ThirdActivity : AppCompatActivity() {
         }
 
         switchBtn.setOnClickListener {
-            sm.clear()
+            sm.logout()
             startActivity(Intent(this, FourthActivity::class.java))
             finish()
         }

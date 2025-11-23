@@ -5,32 +5,6 @@
     android:layout_height="match_parent"
     android:background="@color/white_4">
 
-    <LinearLayout
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="10dp"
-        android:orientation="vertical">
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/internshala_2"
-            android:textColor="@color/black"
-            android:textSize="14sp"
-            android:textStyle="bold">
-
-        </TextView>
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/posts"
-            android:textColor="@color/light_grey"
-            android:textSize="13sp">
-
-        </TextView>
-    </LinearLayout>
-
     <ImageView
         android:id="@+id/status_bar"
         android:layout_width="match_parent"
@@ -47,9 +21,12 @@
 
         <RelativeLayout
             android:id="@+id/search_in"
-            android:layout_width="300dp"
+            android:layout_width="0dp"
             android:layout_height="35dp"
+            android:layout_alignParentStart="true"
+            android:layout_toStartOf="@+id/clear_text"
             android:layout_marginStart="10dp"
+            android:layout_marginEnd="10dp"
             android:layout_centerVertical="true"
             android:background="@drawable/circle_white">
 
@@ -64,11 +41,12 @@
 
             <EditText
                 android:id="@+id/search_text"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_toEndOf="@id/search_icon2"
+                android:layout_toStartOf="@+id/close_button"
                 android:layout_marginStart="5dp"
-                android:hint="internshala"
+                android:hint="Search"
                 android:textSize="14sp"
                 android:textColor="@color/brown"
                 android:layout_centerVertical="true">
@@ -100,8 +78,6 @@
         </RelativeLayout>
 
         <TextView
-            android:layout_toEndOf="@id/search_in"
-            android:layout_marginStart="10dp"
             android:id="@+id/clear_text"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -109,7 +85,8 @@
             android:layout_centerVertical="true"
             android:text="@string/clear"
             android:textSize="16sp"
-            android:textColor="@color/red">
+            android:textColor="@color/red"
+            android:layout_marginEnd="10dp">
         </TextView>
     </RelativeLayout>
 
@@ -121,424 +98,43 @@
         android:orientation="horizontal"
         android:gravity="center">
 
-        <LinearLayout
+        <TextView
+            android:id="@+id/tab_all"
             android:layout_width="0dp"
-            android:layout_height="match_parent"
+            android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:orientation="vertical"
-            android:gravity="center">
+            android:gravity="center"
+            android:text="All"
+            android:textColor="@color/black"
+            android:textStyle="bold" />
 
-            <TextView
-                android:id="@+id/tab_top"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/Top"
-                android:textStyle="bold"
-                android:textSize="15sp"
-                android:textColor="@color/black"
-                android:gravity="center" />
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="2dp"
-                android:background="@color/black" />
-        </LinearLayout>
+        <TextView
+            android:id="@+id/tab_followers"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="Followers"
+            android:textColor="@color/light_grey"
+            android:textStyle="bold" />
 
-        <LinearLayout
+        <TextView
+            android:id="@+id/tab_following"
             android:layout_width="0dp"
-            android:layout_height="match_parent"
+            android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:orientation="vertical"
-            android:gravity="center">
-
-            <TextView
-                android:id="@+id/tab_accounts"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/Accounts"
-                android:textStyle="bold"
-                android:textSize="15sp"
-                android:textColor="@color/light_grey"
-                android:gravity="center" >
-            </TextView>
-        </LinearLayout>
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:orientation="vertical"
-            android:gravity="center">
-            <TextView
-                android:id="@+id/tab_tags"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/Tags"
-                android:textSize="15sp"
-                android:textStyle="bold"
-                android:textColor="@color/light_grey"
-                android:gravity="center" >
-            </TextView>
-        </LinearLayout>
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:orientation="vertical"
-            android:gravity="center">
-            <TextView
-                android:id="@+id/tab_places"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/Places"
-                android:textSize="15sp"
-                android:textStyle="bold"
-                android:textColor="@color/light_grey"
-                android:gravity="center" >
-            </TextView>
-        </LinearLayout>
+            android:gravity="center"
+            android:text="Following"
+            android:textColor="@color/light_grey"
+            android:textStyle="bold" />
     </LinearLayout>
-    <ScrollView
-        android:id="@+id/results_scroll"
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/results_recyclerview"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_below="@id/tabs_row"
-        android:layout_above="@id/home_indicator">
-
-        <LinearLayout
-            android:id="@+id/results_container"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="60dp"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:paddingStart="10dp"
-                android:paddingEnd="10dp">
-
-                <de.hdodenhof.circleimageview.CircleImageView
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
-                    android:src="@drawable/profile_image">
-                </de.hdodenhof.circleimageview.CircleImageView>
-
-                <LinearLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:layout_marginStart="10dp">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/internshala"
-                        android:textStyle="bold"
-                        android:textSize="14sp"
-                        android:textColor="@color/black">
-                    </TextView>
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/internshala"
-                        android:textSize="13sp"
-                        android:textColor="@color/light_grey">
-                    </TextView>
-                </LinearLayout>
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="60dp"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:paddingStart="10dp"
-                android:paddingEnd="10dp">
-                <RelativeLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    >
-                <de.hdodenhof.circleimageview.CircleImageView
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
-                    android:src="@drawable/circle_bg_white"
-                    app:civ_border_width="0.5dp"
-                    app:civ_border_color="@color/black"
-                    >
-                </de.hdodenhof.circleimageview.CircleImageView>
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/hash"
-                        android:textStyle="bold"
-                        android:textSize="20sp"
-                        android:textColor="@color/black"
-                        android:layout_centerInParent="true"
-                        >
-                    </TextView>
-
-                </RelativeLayout>
-
-                <LinearLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:layout_marginStart="10dp">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/internshala_2"
-                        android:textStyle="bold"
-                        android:textSize="14sp"
-                        android:textColor="@color/black">
-                    </TextView>
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/posts"
-                        android:textSize="13sp"
-                        android:textColor="@color/light_grey">
-                    </TextView>
-                </LinearLayout>
-
-
-            </LinearLayout>
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="60dp"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:paddingStart="10dp"
-            android:paddingEnd="10dp">
-
-            <RelativeLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                >
-                <de.hdodenhof.circleimageview.CircleImageView
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
-                    android:src="@drawable/circle_bg_white"
-                    app:civ_border_width="0.5dp"
-                    app:civ_border_color="@color/black"
-                    >
-                </de.hdodenhof.circleimageview.CircleImageView>
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/hash"
-                    android:textStyle="bold"
-                    android:textSize="20sp"
-                    android:textColor="@color/black"
-                    android:layout_centerInParent="true"
-                    >
-                </TextView>
-
-            </RelativeLayout>
-
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:layout_marginStart="10dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/h_1"
-                    android:textStyle="bold"
-                    android:textSize="14sp"
-                    android:textColor="@color/black">
-                </TextView>
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/N_1"
-                    android:textSize="13sp"
-                    android:textColor="@color/light_grey">
-                </TextView>
-            </LinearLayout>
-        </LinearLayout>
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="60dp"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:paddingStart="10dp"
-            android:paddingEnd="10dp">
-
-            <RelativeLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                >
-                <de.hdodenhof.circleimageview.CircleImageView
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
-                    android:src="@drawable/circle_bg_white"
-                    app:civ_border_width="0.5dp"
-                    app:civ_border_color="@color/black"
-                    >
-                </de.hdodenhof.circleimageview.CircleImageView>
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/hash"
-                    android:textStyle="bold"
-                    android:textSize="20sp"
-                    android:textColor="@color/black"
-
-                    android:layout_centerInParent="true"
-                    >
-                </TextView>
-
-            </RelativeLayout>
-
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:layout_marginStart="10dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/h_2"
-                    android:textStyle="bold"
-                    android:textSize="14sp"
-                    android:textColor="@color/black">
-                </TextView>
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/N_2"
-                    android:textSize="13sp"
-                    android:textColor="@color/light_grey">
-                </TextView>
-            </LinearLayout>
-        </LinearLayout>
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="60dp"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:paddingStart="10dp"
-            android:paddingEnd="10dp">
-
-            <RelativeLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                >
-                <de.hdodenhof.circleimageview.CircleImageView
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
-                    android:src="@drawable/circle_bg_white"
-                    app:civ_border_width="0.5dp"
-                    app:civ_border_color="@color/black"
-                    >
-                </de.hdodenhof.circleimageview.CircleImageView>
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/hash"
-                    android:textStyle="bold"
-                    android:textSize="20sp"
-                    android:textColor="@color/black"
-                    android:layout_centerInParent="true"
-                    >
-                </TextView>
-
-            </RelativeLayout>
-
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:layout_marginStart="10dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/h_3"
-                    android:textStyle="bold"
-                    android:textSize="14sp"
-                    android:textColor="@color/black">
-                </TextView>
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/N_1"
-                    android:textSize="13sp"
-                    android:textColor="@color/light_grey">
-                </TextView>
-            </LinearLayout>
-        </LinearLayout>
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="60dp"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:paddingStart="10dp"
-                android:paddingEnd="10dp">
-
-                <RelativeLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    >
-                    <de.hdodenhof.circleimageview.CircleImageView
-                        android:layout_width="40dp"
-                        android:layout_height="40dp"
-                        android:src="@drawable/circle_bg_white"
-                        app:civ_border_width="0.5dp"
-                        app:civ_border_color="@color/black"
-                        >
-                    </de.hdodenhof.circleimageview.CircleImageView>
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/hash"
-                        android:textStyle="bold"
-                        android:textSize="20sp"
-                        android:textColor="@color/black"
-                        android:layout_centerInParent="true"
-                        >
-                    </TextView>
-
-                </RelativeLayout>
-
-                <LinearLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:layout_marginStart="10dp">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/h_4"
-                        android:textStyle="bold"
-                        android:textSize="14sp"
-                        android:textColor="@color/black">
-                    </TextView>
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/N_1"
-                        android:textSize="13sp"
-                        android:textColor="@color/light_grey">
-                    </TextView>
-                </LinearLayout>
-            </LinearLayout>
-
-
-        </LinearLayout>
-    </ScrollView>
+        android:layout_above="@id/home_indicator" />
 
     <ImageView
         android:id="@+id/home_indicator"
@@ -546,7 +142,6 @@
         android:layout_height="20dp"
         android:layout_alignParentBottom="true"
         android:background="@drawable/home_indicator" >
-
     </ImageView>
 
 </RelativeLayout>

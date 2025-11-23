@@ -42,7 +42,7 @@ class EightActivity : AppCompatActivity() {
         setContentView(R.layout.chat)
 
         sessionManager = SessionManager(this)
-        dbHelper = LocalDbHelper(this)
+        dbHelper = LocalDbHelper(this, sessionManager.getUserId().toString())
 
         recyclerView = findViewById(R.id.chats_recycler_view)
         recyclerView.layoutManager = LinearLayoutManager(this)
@@ -73,7 +73,7 @@ class EightActivity : AppCompatActivity() {
             startActivity(intent)
         }
 
-        loadData()
+        loadData() // Initial load
         setupSearch()
     }
 
@@ -82,16 +82,15 @@ class EightActivity : AppCompatActivity() {
         if (isOnline()) {
             setStatus("online")
             startStatusRefresh()
-            loadData()
+            // Do not call loadData() here to prevent flickering
+            // Data is loaded in onCreate and refreshed by polling if online
         }
     }
 
     override fun onPause() {
         super.onPause()
         stopStatusRefresh()
-        if (isOnline()) {
-            setStatus("offline")
-        }
+        setStatus("offline") // Set status to offline when the activity is paused
     }
     
     override fun onDestroy() {
@@ -283,17 +282,24 @@ class EightActivity : AppCompatActivity() {
                     val obj = JSONObject(response.trim())
                     if (obj.optBoolean("success", false)) {
                         val statuses = obj.optJSONObject("statuses")
+                        var changed = false
                         for (userId in userIds) {
                             val statusObj = statuses?.optJSONObject(userId)
                             if (statusObj != null) {
                                 val user = usersMap[userId]
                                 if (user != null) {
-                                    user.onlineStatus = statusObj.optString("status", "offline")
-                                    user.lastSeen = statusObj.optString("last_seen", null)
+                                    val newStatus = statusObj.optString("status", "offline")
+                                    if (user.onlineStatus != newStatus) {
+                                        user.onlineStatus = newStatus
+                                        user.lastSeen = statusObj.optString("last_seen", null)
+                                        changed = true
+                                    }
                                 }
                             }
                         }
-                        adapter.notifyDataSetChanged()
+                        if (changed) {
+                            adapter.notifyDataSetChanged() // Notify adapter if any status changed
+                        }
                     }
                 } catch (e: Exception) { e.printStackTrace() }
             },
@@ -363,21 +369,27 @@ class EightActivity : AppCompatActivity() {
                     if (o2.optBoolean("success", false)) {
                         val statuses = o2.optJSONObject("statuses")
                         val online = mutableListOf<User>()
+                        var changed = false
                         for (f in followers) {
                             val s = statuses?.optJSONObject(f.uid)
                             if (s != null) {
-                                val status = s.optString("status", "offline")
-                                f.onlineStatus = status
-                                f.lastSeen = s.optString("last_seen", null)
-                                if (status == "online") {
+                                val newStatus = s.optString("status", "offline")
+                                if (f.onlineStatus != newStatus) {
+                                    f.onlineStatus = newStatus
+                                    f.lastSeen = s.optString("last_seen", null)
+                                    changed = true
+                                }
+                                if (newStatus == "online") {
                                     online.add(f)
                                 }
                             }
                         }
-                        runOnUiThread {
-                            val rv = findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.online_recycler_view)
-                            val adapter = rv.adapter as? OnlineUserAdapter
-                            adapter?.updateData(online)
+                        if (changed) {
+                            runOnUiThread {
+                                val rv = findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.online_recycler_view)
+                                val adapter = rv.adapter as? OnlineUserAdapter
+                                adapter?.updateData(online)
+                            }
                         }
                     }
                 } catch (e: Exception) { e.printStackTrace() }
@@ -441,7 +453,7 @@ class EightActivity : AppCompatActivity() {
             },
             { error -> error.printStackTrace() }) {
             override fun getHeaders(): MutableMap<String, String> {
-                return mutableMapOf("Authorization" to "Bearer ${sessionManager.getToken()}")
+                return mutableMapOf("Authorization" to "Bearer $token")
             }
         }
         req.retryPolicy = DefaultRetryPolicy(8000, DefaultRetryPolicy.DEFAULT_MAX_RETRIES, DefaultRetryPolicy.DEFAULT_BACKOFF_MULT)

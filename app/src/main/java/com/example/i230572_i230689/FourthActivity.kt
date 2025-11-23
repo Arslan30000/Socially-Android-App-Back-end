@@ -49,10 +49,12 @@ class FourthActivity : AppCompatActivity() {
                             val usernameSaved = user.optString("username")
 
                             if (!token.isNullOrEmpty()) {
-                                SessionManager(this).saveSession(token, userId, usernameSaved)
+                                val sessionManager = SessionManager(this)
+                                sessionManager.logout()
+                                sessionManager.saveSession(token, userId, usernameSaved)
                             }
 
-                            startActivity(Intent(this, ThirdActivity::class.java))
+                            startActivity(Intent(this, FifthActivity::class.java))
                             finish()
                         } else {
                             Toast.makeText(this, obj.optString("message", "Login failed"), Toast.LENGTH_SHORT).show()

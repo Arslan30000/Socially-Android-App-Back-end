@@ -14,7 +14,8 @@ import java.io.File
 class StoryAdapter(
     private val context: Context,
     private val stories: List<Story>,
-    private val onStoryClick: (Story) -> Unit
+    private val onStoryClick: (Story) -> Unit,
+    private val onAddStoryClick: () -> Unit
 ) : RecyclerView.Adapter<StoryAdapter.StoryViewHolder>() {
 
     class StoryViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
@@ -33,19 +34,19 @@ class StoryAdapter(
         holder.userName.text = story.username
 
         if (story.isAddButton) {
-            holder.addStoryPlusIcon.visibility = if (story.hasStories) View.GONE else View.VISIBLE
+            holder.addStoryPlusIcon.visibility = View.VISIBLE
+            holder.addStoryPlusIcon.setOnClickListener { onAddStoryClick() }
         } else {
             holder.addStoryPlusIcon.visibility = View.GONE
         }
 
-        // Corrected: Load images from file paths using Picasso
         if (story.userProfilePicture?.isNotEmpty() == true) {
             Picasso.get().load(File(story.userProfilePicture)).placeholder(R.drawable.profile_image).into(holder.userImage)
         } else {
             holder.userImage.setImageResource(R.drawable.profile_image)
         }
 
-        holder.itemView.setOnClickListener {
+        holder.userImage.setOnClickListener {
             onStoryClick(story)
         }
     }

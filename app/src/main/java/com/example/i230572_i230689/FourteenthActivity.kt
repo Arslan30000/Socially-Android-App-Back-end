@@ -135,6 +135,16 @@ class FourteenthActivity : AppCompatActivity() {
                     val obj = JSONObject(response.trim())
                     if (obj.optBoolean("success", false)) {
                         Toast.makeText(this@FourteenthActivity, "Profile updated successfully", Toast.LENGTH_SHORT).show()
+                        
+                        // Update SessionManager if username changed
+                        if (sessionManager.getUsername() != username) {
+                            sessionManager.saveSession(token, sessionManager.getUserId(), username)
+                        }
+
+                        // Send broadcast to notify other activities (e.g., LastActivity) to refresh
+                        val intent = Intent("profile_updated")
+                        sendBroadcast(intent)
+
                         finish()
                     } else {
                         Toast.makeText(this@FourteenthActivity, obj.optString("message", "Update failed"), Toast.LENGTH_SHORT).show()

@@ -25,12 +25,14 @@ class SixthActivity : AppCompatActivity() {
     private lateinit var dbHelper: LocalDbHelper
     private val posts = mutableListOf<Post>()
     private lateinit var adapter: ExploreAdapter
+    private lateinit var sessionManager: SessionManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.search_page)
         
-        dbHelper = LocalDbHelper(this)
+        sessionManager = SessionManager(this)
+        dbHelper = LocalDbHelper(this, sessionManager.getUserId().toString())
 
         setupUI()
         loadPosts()
@@ -92,7 +94,6 @@ class SixthActivity : AppCompatActivity() {
     }
 
     private fun fetchAllPostsFromNetwork() {
-        val sessionManager = SessionManager(this)
         val token = sessionManager.getToken() ?: return
         val url = BuildConfig.BASE_URL + "get_all_posts.php"
         val rq = Volley.newRequestQueue(this)

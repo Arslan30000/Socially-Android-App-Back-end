@@ -22,7 +22,7 @@ class UserListAdapter(private val users: MutableList<User>, private val listType
     class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         val profileImage: CircleImageView = itemView.findViewById(R.id.profile_image)
         val username: TextView = itemView.findViewById(R.id.username_text)
-        val actionButton: Button = itemView.findViewById(R.id.action_button)
+
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -43,18 +43,8 @@ class UserListAdapter(private val users: MutableList<User>, private val listType
             holder.profileImage.setImageResource(R.drawable.profile_image)
         }
 
-        // Show action button based on list type
-        if (listType == "following") {
-            holder.actionButton.visibility = View.VISIBLE
-            holder.actionButton.text = "Unfollow"
-            holder.actionButton.setOnClickListener {
-                unfollowUser(user, holder, position)
-            }
-        } else {
-            holder.actionButton.visibility = View.GONE
-        }
 
-        // Navigate to user profile on username click
+
         holder.username.setOnClickListener {
             val context = holder.itemView.context
             val intent = Intent(context, TwentyActivity::class.java)
@@ -62,7 +52,6 @@ class UserListAdapter(private val users: MutableList<User>, private val listType
             context.startActivity(intent)
         }
 
-        // Navigate to user profile on image click
         holder.profileImage.setOnClickListener {
             val context = holder.itemView.context
             val intent = Intent(context, TwentyActivity::class.java)

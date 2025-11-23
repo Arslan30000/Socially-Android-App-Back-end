@@ -36,7 +36,13 @@ class NineteenActivity : AppCompatActivity() {
         setContentView(R.layout.my_story)
 
         sessionManager = SessionManager(this)
-        dbHelper = LocalDbHelper(this)
+        val userId = intent.getStringExtra("USER_ID")
+        if (userId.isNullOrEmpty()) {
+            Toast.makeText(this, "User ID not found", Toast.LENGTH_SHORT).show()
+            finish()
+            return
+        }
+        dbHelper = LocalDbHelper(this, userId)
 
         storyImageView = findViewById(R.id.main_image)
         userProfileImageView = findViewById(R.id.pfp_image)
@@ -44,13 +50,6 @@ class NineteenActivity : AppCompatActivity() {
 
         findViewById<View>(R.id.reverse_view).setOnClickListener { showPreviousStory() }
         findViewById<View>(R.id.skip_view).setOnClickListener { showNextStory() }
-
-        val userId = intent.getStringExtra("USER_ID")
-        if (userId.isNullOrEmpty()) {
-            Toast.makeText(this, "User ID not found", Toast.LENGTH_SHORT).show()
-            finish()
-            return
-        }
 
         loadStories(userId)
     }
@@ -120,7 +119,7 @@ class NineteenActivity : AppCompatActivity() {
                             displayStory(currentStoryIndex)
                             dbHelper.upsertStories(networkStories)
                         } else {
-                            if (storiesList.isEmpty()) { // Only show if no cached stories were shown
+                            if (storiesList.isEmpty()) {
                                 Toast.makeText(this@NineteenActivity, "No stories found.", Toast.LENGTH_SHORT).show()
                                 finish()
                             }

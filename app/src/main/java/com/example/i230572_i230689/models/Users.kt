@@ -5,37 +5,28 @@ data class Story(
     var storyId: String = "",
     var userId: String = "",
     var username: String = "",
-    var userProfilePicture: String? = null, // Bitmap string for the user's pfp
-    var storyImage: String = "",            // Bitmap string for the story image itself
-    var timestamp: Long = 0L,               // Time of upload, crucial for 24-hour logic
-
-    // This local-only flag tells the adapter if this is the user's "Add Story" circle.
-    // The @Exclude annotation prevents this field from being saved to Firebase.
+    var userProfilePicture: String? = null,
+    var storyImage: String = "",
+    var timestamp: Long = 0L,
     @get:Exclude
-    var isAddButton: Boolean = false
-,
+    var isAddButton: Boolean = false,
     @get:Exclude
     var hasStories: Boolean = false
 ) {
-    // Add a no-argument constructor, which is required by Firebase for deserialization.
-    constructor() : this("", "", "", null, "", 0L, false)
+    // Corrected: Added the missing 'hasStories' parameter to the constructor call
+    constructor() : this("", "", "", null, "", 0L, false, false)
 }
 
 data class Post(
     var postId: String = "",
     var userId: String = "",
-    var postImage: String = "", // The Base64 string of the main post image
+    var postImage: String = "",
     var caption: String = "",
     var timestamp: Long = 0L,
-
-    // We will populate these fields locally in the app, not from the /posts/ node.
-    // The @Exclude annotation is crucial to prevent Firebase from trying to save them.
     @get:Exclude
     var username: String = "",
     @get:Exclude
-    var userProfileImage: String = "", // Base64 string for the author's PFP
-
-    // You can add these later as you build out features
+    var userProfileImage: String = "",
     @get:Exclude
     var likesCount: Int = 0,
     @get:Exclude
@@ -43,7 +34,6 @@ data class Post(
     @get:Exclude
     var commentsCount: Int = 0
 ) {
-    // Required no-argument constructor for Firebase to work
     constructor() : this("", "", "", "", 0L)
 }
 
@@ -56,7 +46,6 @@ data class Message(
     var postId: String = "",
     var timestamp: Long = 0,
     val chatId: String = "",
-    // New fields to support server messages
     var attachmentUrl: String = "",
     var type: String = "text",
     var isSeen: Boolean = false,
@@ -99,6 +88,6 @@ data class User(
     var stories: Map<String, Story> = emptyMap(),
     var chats: Map<String, Chat> = emptyMap(),
     var messages: Map<String, Map<String, Message>> = emptyMap(),
-    var onlineStatus: String = "offline",  // "online" or "offline"
+    var onlineStatus: String = "offline",
     var lastSeen: String? = null
 )

@@ -53,6 +53,8 @@ class NinthActivity : AppCompatActivity() {
 
     private var statusRefreshHandler: Handler? = null
     private var statusRefreshRunnable: Runnable? = null
+    private var messageRefreshHandler: Handler? = null
+    private var messageRefreshRunnable: Runnable? = null
     private var callCheckHandler: Handler? = null
     private var callCheckRunnable: Runnable? = null
     private var incomingCallDialog: AlertDialog? = null
@@ -82,7 +84,7 @@ class NinthActivity : AppCompatActivity() {
         otherUserId = intent.getStringExtra("otherUserId") ?: ""
 
         sessionManager = SessionManager(this)
-        dbHelper = LocalDbHelper(this)
+        dbHelper = LocalDbHelper(this, sessionManager.getUserId().toString())
         val currentUserId = sessionManager.getUserId().toString()
 
         recyclerView = findViewById(R.id.chat_recycler_view)
@@ -123,17 +125,17 @@ class NinthActivity : AppCompatActivity() {
             setStatus("online")
         }
         startStatusRefresh()
+        startMessageRefresh()
         startCallChecking()
-        // Refresh messages when returning to the screen
-        loadMessages()
     }
 
     override fun onPause() {
         super.onPause()
         stopStatusRefresh()
+        stopMessageRefresh()
         stopCallChecking()
         if (isOnline()) {
-            setStatus("offline")
+            setStatus("offline") // Set status to offline when the activity is paused
         }
         if (!chatId.isNullOrEmpty()) {
             callVanishOnClose(chatId!!)
@@ -143,6 +145,7 @@ class NinthActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         stopStatusRefresh()
+        stopMessageRefresh()
         stopCallChecking()
     }
 
@@ -250,7 +253,7 @@ class NinthActivity : AppCompatActivity() {
                     val r = JSONObject(response.trim())
                     if (r.optBoolean("success", false)) {
                         messageInput.text.clear()
-                        fetchMessagesFromNetwork() // Fetch latest messages after sending
+                        fetchMessagesFromNetwork()
                     }
                 } catch (e: Exception) { e.printStackTrace() }
                 finally {
@@ -431,6 +434,24 @@ class NinthActivity : AppCompatActivity() {
         statusRefreshRunnable?.let { statusRefreshHandler?.removeCallbacks(it) }
     }
 
+    private fun startMessageRefresh() {
+        if (messageRefreshHandler == null) {
+            messageRefreshHandler = Handler(Looper.getMainLooper())
+        }
+        stopMessageRefresh()
+        messageRefreshRunnable = Runnable {
+            if (!isDestroyed && !chatId.isNullOrEmpty() && isOnline()) {
+                fetchMessagesFromNetwork()
+            }
+            messageRefreshHandler?.postDelayed(messageRefreshRunnable!!, 5000) // Poll every 5 seconds
+        }
+        messageRefreshHandler?.post(messageRefreshRunnable!!)
+    }
+
+    private fun stopMessageRefresh() {
+        messageRefreshRunnable?.let { messageRefreshHandler?.removeCallbacks(it) }
+    }
+
     private fun setStatus(status: String) {
         val token = sessionManager.getToken() ?: return
         val url = BuildConfig.BASE_URL + "set_status.php"
@@ -510,12 +531,14 @@ class NinthActivity : AppCompatActivity() {
                         val statuses = obj.optJSONObject("statuses")
                         val statusObj = statuses?.optJSONObject(userId)
                         if (statusObj != null) {
-                            val status = statusObj.optString("status", "offline")
                             val user = usersMap[userId]
                             if (user != null) {
-                                user.onlineStatus = status
-                                user.lastSeen = statusObj.optString("last_seen", null)
-                                updateChatHeaderStatus(status)
+                                val newStatus = statusObj.optString("status", "offline")
+                                if (user.onlineStatus != newStatus) {
+                                    user.onlineStatus = newStatus
+                                    user.lastSeen = statusObj.optString("last_seen", null)
+                                    updateChatHeaderStatus(newStatus) // Update UI immediately
+                                }
                             }
                         }
                     }
@@ -542,10 +565,12 @@ class NinthActivity : AppCompatActivity() {
     }
 
     private fun updateMessages(newMessages: List<Message>) {
-        messages.clear()
-        messages.addAll(newMessages)
-        messageAdapter.notifyDataSetChanged()
-        recyclerView.scrollToPosition(messages.size - 1)
+        if (messages != newMessages) {
+            messages.clear()
+            messages.addAll(newMessages)
+            messageAdapter.notifyDataSetChanged()
+            recyclerView.scrollToPosition(messages.size - 1)
+        }
     }
 
     private fun openGalleryForImage() {
@@ -732,7 +757,7 @@ class NinthActivity : AppCompatActivity() {
                     try {
                         val r = JSONObject(response.trim())
                         if (r.optBoolean("success", false)) {
-                            loadMessages()
+                            fetchMessagesFromNetwork()
                         } else {
                             Toast.makeText(this, r.optString("message", "Failed to edit"), Toast.LENGTH_SHORT).show()
                         }
@@ -766,7 +791,7 @@ class NinthActivity : AppCompatActivity() {
                     try {
                         val r = JSONObject(response.trim())
                         if (r.optBoolean("success", false)) {
-                            loadMessages()
+                            fetchMessagesFromNetwork()
                         } else {
                             Toast.makeText(this, r.optString("message", "Failed to delete"), Toast.LENGTH_SHORT).show()
                         }
